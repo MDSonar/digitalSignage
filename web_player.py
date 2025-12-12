@@ -76,6 +76,7 @@ def get_playlist():
                             repeats = 1
                         if name:
                             selected.append({'name': name, 'repeats': max(1, repeats)})
+
     except Exception:
         logger.exception('Failed to read playlist.json')
 
@@ -87,7 +88,18 @@ def get_playlist():
         for entry in selected:
             name = entry.get('name')
             repeats = entry.get('repeats', 1)
+            
+            # Check if name is valid before string operations
             if not name:
+                continue
+            
+            # Check for YouTube URLs
+            if "youtube.com" in name or "youtu.be" in name:
+                playlist.append({
+                    "type": "youtube",
+                    "url": name,
+                    "name": name
+                })
                 continue
             if name in video_files and mode in ('both', 'video'):
                 for _ in range(repeats):

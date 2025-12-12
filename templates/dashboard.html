@@ -62,8 +62,12 @@
         .user-info{font-size:0.85rem;opacity:0.95}
         .logout-btn{background:rgba(255,255,255,0.12);color:white;padding:8px 12px;border-radius:10px;text-decoration:none;font-weight:700;border:1px solid rgba(255,255,255,0.06)}
 
-        /* Content grid */
-        .content{display:grid;grid-template-columns: 360px 1fr;gap:18px;padding:18px}
+        /* Content - single column layout */
+        .content{display:flex;flex-direction:column;gap:18px;padding:18px;max-width:900px;margin:0 auto}
+
+        /* Progress bars */
+        .progress-wrap{position:relative;height:3px;background:rgba(15,23,42,0.08);overflow:hidden;margin-bottom:8px}
+        .progress{height:100%;background:linear-gradient(90deg,#10b981,#34d399);transition:width .3s ease;border-radius:0}
 
         /* Top-level card style */
         .card{background:var(--card);border-radius:10px;padding:14px;border:1px solid rgba(15,23,42,0.04);transition:transform .18s var(--easing), box-shadow .18s var(--easing)}
@@ -106,6 +110,7 @@
         .file-badge{font-size:0.75rem;padding:6px 8px;border-radius:8px;background:rgba(0,0,0,0.04);color:var(--muted);font-weight:700}
         .badge-pptx{background:#fff7ed;color:#7c2d12}
         .badge-pdf{background:#fff1f2;color:#7f1d1d}
+        .badge-youtube{background:#fff0f0;color:#c41e3a;border:1px solid rgba(196,30,58,0.1)}
 
         /* Upload area (styled file input as drop area) */
         .drop-area{display:flex;align-items:center;justify-content:center;gap:10px;padding:12px;border-radius:10px;border:2px dashed rgba(86,99,235,0.08);background:linear-gradient(180deg, rgba(86,99,235,0.03), rgba(86,99,235,0.01));cursor:pointer;color:var(--muted);font-weight:700;text-align:center}
@@ -356,128 +361,37 @@
                 <h1>🖥️ Litmus Signage Dashboard</h1>
                 <div class="user-info">Logged in as: {{ username }}</div>
             </div>
+            <!-- Player controls in header -->
+            <form action="{{ url_for('send_command') }}" method="POST" class="control-form" aria-label="Player controls" style="display:flex;gap:8px;align-items:center">
+                <input type="hidden" name="target" value="web">
+                <button class="icon-btn ghost" aria-label="Previous" name="action" value="prev" title="Previous" type="submit" style="color:white;padding:6px">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M11.5 12L20 18V6L11.5 12Z" fill="currentColor" /><path d="M4 18V6L9.5 12L4 18Z" fill="currentColor" /></svg>
+                </button>
+                <button class="icon-btn" aria-label="Play" name="action" value="play" title="Play" type="submit" style="color:white;padding:6px">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M8 5v14l11-7L8 5z" /></svg>
+                </button>
+                <button class="icon-btn pause" aria-label="Pause" name="action" value="pause" title="Pause" type="submit" style="color:white;padding:6px">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="6" y="5" width="4" height="14" fill="currentColor" /><rect x="14" y="5" width="4" height="14" fill="currentColor" /></svg>
+                </button>
+                <button class="icon-btn ghost" aria-label="Next" name="action" value="next" title="Next" type="submit" style="color:white;padding:6px">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M3 6v12l9-6-9-6z" fill="currentColor" /><path d="M12 6v12l9-6-9-6z" fill="currentColor" /></svg>
+                </button>
+            </form>
             <a href="{{ url_for('logout') }}" class="logout-btn" aria-label="Logout">Logout</a>
         </header>
 
-        <!-- top progress bar -->
-        <div class="progress-wrap" aria-hidden="true">
-            <div id="topProgress" class="progress" style="width:0%"></div>
+        <!-- Flash messages under header -->
+        <div class="flash-wrap" aria-live="polite" style="padding:12px 18px;padding-bottom:0">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="flash {{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
         </div>
 
         <div class="content" role="main">
-            <!-- Left column: Player controls and mode -->
-            <div class="card">
-                <div class="section-header"><h2>⚙️ Player Control</h2></div>
-
-                <!-- Flash messages -->
-                <div class="flash-wrap" aria-live="polite">
-                    {% with messages = get_flashed_messages(with_categories=true) %}
-                        {% if messages %}
-                            {% for category, message in messages %}
-                                <div class="flash {{ category }}">{{ message }}</div>
-                            {% endfor %}
-                        {% endif %}
-                    {% endwith %}
-                </div>
-
-                <div class="controls">
-                    <!-- Mode form (must keep action and method intact) -->
-                    <form action="{{ url_for('set_mode') }}" method="POST" class="control-block" id="modeForm" aria-label="Player mode form">
-                        <div class="section-header" style="margin-bottom:6px">
-                            <h2>Player Mode</h2>
-                            <div class="section-sub">Choose content to play</div>
-                        </div>
-
-                        <div class="mode-wrap">
-                            <!-- Visual segmented slider (JS will update hidden input named 'mode') -->
-                            <div class="segmented" id="segmented" role="tablist" aria-label="Player mode">
-                                <div class="slider-knob" id="sliderKnob" aria-hidden="true"></div>
-                                <button type="button" role="tab" aria-pressed="false" data-value="video">Video</button>
-                                <button type="button" role="tab" aria-pressed="false" data-value="presentation">Presentation</button>
-                                <button type="button" role="tab" aria-pressed="false" data-value="both">Both</button>
-                            </div>
-
-                            <!-- Hidden input to preserve server-side name 'mode' -->
-                            <input type="hidden" name="mode" id="modeInput" value="{{ mode|default('both') }}">
-                        </div>
-
-                        <div style="margin-top:8px">
-                            <button type="submit" class="save-mode-btn" aria-label="Save player mode">Save Mode</button>
-                        </div>
-                    </form>
-
-                    <hr style="border:none;height:8px" />
-
-                    <!-- Web Player Controls -->
-                    <div class="control-block" aria-label="Web player controls">
-                        <div class="section-header"><h2>Web Player Controls</h2></div>
-                        <div class="control-row">
-                            <form action="{{ url_for('send_command') }}" method="POST" class="control-form" aria-label="Web player command form">
-                                <input type="hidden" name="target" value="web">
-                                <button class="icon-btn ghost" aria-label="Previous" name="action" value="prev" title="Previous" type="submit">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                                        <path d="M11.5 12L20 18V6L11.5 12Z" fill="currentColor" />
-                                        <path d="M4 18V6L9.5 12L4 18Z" fill="currentColor" />
-                                    </svg>
-                                </button>
-                                <button class="icon-btn" aria-label="Play" name="action" value="play" title="Play" type="submit">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                                        <path d="M8 5v14l11-7L8 5z" />
-                                    </svg>
-                                </button>
-                                <button class="icon-btn pause" aria-label="Pause" name="action" value="pause" title="Pause" type="submit">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                                        <rect x="6" y="5" width="4" height="14" fill="currentColor" />
-                                        <rect x="14" y="5" width="4" height="14" fill="currentColor" />
-                                    </svg>
-                                </button>
-                                <button class="icon-btn ghost" aria-label="Next" name="action" value="next" title="Next" type="submit">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                                        <path d="M3 6v12l9-6-9-6z" fill="currentColor" />
-                                        <path d="M12 6v12l9-6-9-6z" fill="currentColor" />
-                                    </svg>
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-
-                    <!-- Signage (HDMI) Controls -->
-                    <div class="control-block" aria-label="Signage controls">
-                        <div class="section-header"><h2>Signage (HDMI) Controls</h2></div>
-                        <div class="control-row">
-                            <form action="{{ url_for('send_command') }}" method="POST" class="control-form" aria-label="Signage command form">
-                                <input type="hidden" name="target" value="signage">
-                                <button class="icon-btn ghost" aria-label="Previous signage" name="action" value="prev" title="Previous" type="submit">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                                        <path d="M11.5 12L20 18V6L11.5 12Z" fill="currentColor" />
-                                        <path d="M4 18V6L9.5 12L4 18Z" fill="currentColor" />
-                                    </svg>
-                                </button>
-                                <button class="icon-btn" aria-label="Play signage" name="action" value="play" title="Play" type="submit">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                                        <path d="M8 5v14l11-7L8 5z" />
-                                    </svg>
-                                </button>
-                                <button class="icon-btn pause" aria-label="Pause signage" name="action" value="pause" title="Pause" type="submit">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                                        <rect x="6" y="5" width="4" height="14" fill="currentColor" />
-                                        <rect x="14" y="5" width="4" height="14" fill="currentColor" />
-                                    </svg>
-                                </button>
-                                <button class="icon-btn ghost" aria-label="Next signage" name="action" value="next" title="Next" type="submit">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                                        <path d="M3 6v12l9-6-9-6z" fill="currentColor" />
-                                        <path d="M12 6v12l9-6-9-6z" fill="currentColor" />
-                                    </svg>
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Right column: Uploads and lists -->
-            <div>
                 <!-- Playlist panel -->
                 <div class="card" aria-labelledby="playlistHeading" style="margin-bottom:12px">
                     <div class="section-header"><h2 id="playlistHeading">🎵 Playlist (Ordered)</h2></div>
@@ -491,6 +405,105 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- YouTube Card (Add + Links merged) -->
+                <div class="card" aria-labelledby="youtubeHeading" style="margin-bottom:12px">
+                    <div class="section-header"><h2 id="youtubeHeading">🎬 YouTube Videos</h2></div>
+
+                    <!-- Add YouTube Form -->
+                    <div class="upload-form" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid rgba(15,23,42,0.08)">
+                        <form action="{{ url_for('add_youtube_link') }}" method="POST" aria-label="Add YouTube link form">
+                            
+                            <div style="display:flex;flex-direction:column;gap:10px">
+                                <div style="display:flex;flex-direction:column;gap:6px">
+                                    <label for="youtube_url" style="font-weight:600;color:var(--text);font-size:0.9rem">YouTube URL *</label>
+                                    <input 
+                                        type="url" 
+                                        id="youtube_url"
+                                        name="youtube_url" 
+                                        placeholder="https://www.youtube.com/watch?v=..." 
+                                        required 
+                                        style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(15,23,42,0.12);font-size:0.95rem;transition:border-color 0.2s"
+                                        onfocus="this.style.borderColor='var(--accent)'"
+                                        onblur="this.style.borderColor='rgba(15,23,42,0.12)'"
+                                    />
+                                    <small style="color:var(--muted);font-size:0.85rem">Paste a YouTube video link (e.g., youtube.com/watch?v=... or youtu.be/...)</small>
+                                </div>
+
+                                <div style="display:flex;flex-direction:column;gap:6px">
+                                    <label for="youtube_name" style="font-weight:600;color:var(--text);font-size:0.9rem">Display Name (Optional)</label>
+                                    <input 
+                                        type="text" 
+                                        id="youtube_name"
+                                        name="youtube_name" 
+                                        placeholder="My Video Title" 
+                                        style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(15,23,42,0.12);font-size:0.95rem;transition:border-color 0.2s"
+                                        onfocus="this.style.borderColor='var(--accent)'"
+                                        onblur="this.style.borderColor='rgba(15,23,42,0.12)'"
+                                    />
+                                    <small style="color:var(--muted);font-size:0.85rem">Leave blank to use the URL as the name</small>
+                                </div>
+                            </div>
+
+                            <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:6px">
+                                <button type="submit" class="save-mode-btn" aria-label="Add YouTube video">Add Video</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- YouTube Links List -->
+                    <div style="margin-bottom:8px;color:var(--muted);font-size:0.88rem;font-weight:600">Your YouTube Videos</div>
+                    <div class="files-list">
+                        {% if youtube_links %}
+                            {% for yt in youtube_links %}
+                                <div class="file-item" role="listitem">
+                                    <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
+                                        
+                                        <!-- Checkbox: consistent with video card -->
+                                        <input
+                                            type="checkbox"
+                                            class="playlist-checkbox"
+                                            data-filename="{{ yt.url }}"
+                                            data-content-type="youtube"
+                                            {% if yt.in_playlist %}checked{% endif %}
+                                            aria-label="Add {{ yt.name }} to playlist"
+                                        >
+
+                                        <!-- Info block -->
+                                        <div class="file-info">
+                                            <div class="file-name">{{ yt.name }}</div>
+                                            <div class="file-size">{{ yt.url }}</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="file-actions">
+                                        <!-- Badge (always YT) -->
+                                        <span class="file-badge badge-youtube">YOUTUBE</span>
+
+                                        <!-- Delete button -->
+                                        <form class="delete-form"
+                                            action="{{ url_for('delete_youtube_link') }}"
+                                            method="POST"
+                                            onsubmit="return confirm('Delete {{ yt.name }}?')">
+                                            <input type="hidden" name="url" value="{{ yt.url }}">
+                                            <button type="submit" class="delete-btn" aria-label="Delete {{ yt.name }}">Delete</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="file-item" style="justify-content:center">
+                                <div class="muted">No YouTube links added yet</div>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Video Upload Progress Bar -->
+                <div class="progress-wrap" aria-hidden="true" id="videoProgressWrap" style="display:none">
+                    <div id="videoProgress" class="progress" style="width:0%"></div>
+                </div>
+
                 <!-- Videos card -->
                 <div class="card" aria-labelledby="videosHeading" style="margin-bottom:12px">
                     <div class="section-header"><h2 id="videosHeading">📹 Videos</h2></div>
@@ -543,6 +556,11 @@
                             <div class="file-item" style="justify-content:center"><div class="muted">No videos uploaded yet</div></div>
                         {% endif %}
                     </div>
+                </div>
+
+                <!-- Presentation Upload Progress Bar -->
+                <div class="progress-wrap" aria-hidden="true" id="presentationProgressWrap" style="display:none">
+                    <div id="presentationProgress" class="progress" style="width:0%"></div>
                 </div>
 
                 <!-- Presentations card -->
@@ -612,67 +630,7 @@
 
 <script>
     (function(){
-        // Segmented slider logic
-        const segmented = document.getElementById('segmented');
-        const buttons = Array.from(segmented.querySelectorAll('button'));
-        const knob = document.getElementById('sliderKnob');
-        const modeInput = document.getElementById('modeInput');
-
-        // Map button index to value
-        const values = buttons.map(b => b.dataset.value);
-
-        // Initialize selected from server-side value
-        let initial = (modeInput.value || 'both').toLowerCase();
-        let selectedIndex = Math.max(0, values.indexOf(initial));
-        if (selectedIndex === -1) selectedIndex = 2;
-
-        function updateUI(index, animate=true){
-            // update aria-pressed
-            buttons.forEach((b,i)=> b.setAttribute('aria-pressed', i===index ? 'true' : 'false'));
-            // place knob
-            const total = buttons.length;
-            const segmentWidth = 100 / total;
-            const leftPercent = 4 + index * (segmentWidth); // small padding compensation
-            knob.style.left = `calc(${index * (100/total)}% + 4px)`;
-            // update hidden input
-            modeInput.value = values[index];
-        }
-
-        // Click handlers
-        buttons.forEach((b, i) => {
-            b.addEventListener('click', () => updateUI(i));
-            b.addEventListener('keydown', (e) => {
-                if (e.key === 'ArrowLeft') updateUI(Math.max(0, i-1));
-                if (e.key === 'ArrowRight') updateUI(Math.min(buttons.length-1, i+1));
-            });
-        });
-
-        // Drag support for knob (lightweight)
-        (function addDrag(){
-            let dragging = false;
-            let startX = 0;
-            knob.addEventListener('pointerdown', (ev) => {
-                ev.preventDefault();
-                dragging = true;
-                startX = ev.clientX;
-                knob.setPointerCapture(ev.pointerId);
-            });
-            window.addEventListener('pointermove', (ev) => {
-                if (!dragging) return;
-                const rect = segmented.getBoundingClientRect();
-                const relX = ev.clientX - rect.left;
-                let pct = Math.max(0, Math.min(1, relX / rect.width));
-                const idx = Math.round(pct * (buttons.length - 1));
-                updateUI(idx);
-            });
-            window.addEventListener('pointerup', (ev) => { dragging = false; });
-        })();
-
-        // Set initial UI
-        updateUI(selectedIndex);
-
-        // Make segmented collapse to buttons on tiny screens by CSS fallback (JS not needed)
-
+        
         // File input drop areas: improve UX (keep functionality) and show selected filename
         const dropAreas = document.querySelectorAll('.drop-area');
         function formatBytes(bytes) {
@@ -802,30 +760,50 @@
         });
 
         // Progress bar animation on file upload forms (UI-only, lightweight)
-        const topProgress = document.getElementById('topProgress');
+        const videoProgress = document.getElementById('videoProgress');
+        const videoProgressWrap = document.getElementById('videoProgressWrap');
+        const presentationProgress = document.getElementById('presentationProgress');
+        const presentationProgressWrap = document.getElementById('presentationProgressWrap');
+        
         const uploadForms = document.querySelectorAll('form.uploadForm');
         uploadForms.forEach(form => {
             form.addEventListener('submit', (e) => {
-                topProgress.style.width = '6%';
-                topProgress.style.transition = 'width 300ms linear';
-                setTimeout(()=> topProgress.style.width = '30%', 120);
-                setTimeout(()=> topProgress.style.width = '55%', 700);
-                setTimeout(()=> topProgress.style.width = '78%', 1400);
-                setTimeout(()=> topProgress.style.width = '98%', 5000);
+                const action = form.getAttribute('action') || '';
+                const input = form.querySelector('input[type="file"]');
+                
+                // Determine which progress bar to use based on content type
+                let progressBar, progressWrap;
+                if (action.indexOf('/upload/presentation') !== -1 || (input && input.accept && input.accept.indexOf('.ppt') !== -1)) {
+                    progressBar = presentationProgress;
+                    progressWrap = presentationProgressWrap;
+                } else {
+                    progressBar = videoProgress;
+                    progressWrap = videoProgressWrap;
+                }
+                
+                if (progressBar && progressWrap) {
+                    progressWrap.style.display = 'block';
+                    progressBar.style.width = '6%';
+                    progressBar.style.transition = 'width 300ms linear';
+                    setTimeout(()=> progressBar.style.width = '30%', 120);
+                    setTimeout(()=> progressBar.style.width = '55%', 700);
+                    setTimeout(()=> progressBar.style.width = '78%', 1400);
+                    setTimeout(()=> progressBar.style.width = '98%', 5000);
+                }
             });
         });
 
-        // On page load, animate progress to 100% then hide
+        // On page load, hide progress bars
         window.addEventListener('pageshow', () => {
-            setTimeout(()=> { topProgress.style.width = '100%'; setTimeout(()=> { topProgress.style.width = '0%'; }, 300); }, 80);
+            if (videoProgressWrap) videoProgressWrap.style.display = 'none';
+            if (presentationProgressWrap) presentationProgressWrap.style.display = 'none';
+            if (videoProgress) videoProgress.style.width = '0%';
+            if (presentationProgress) presentationProgress.style.width = '0%';
         });
 
-        // Ensure forms with file inputs also show progress when submit via buttons
-        const uploadButtons = document.querySelectorAll('form.uploadForm button[type="submit"]');
-        uploadButtons.forEach(btn => { btn.addEventListener('click', () => { topProgress.style.width = '6%'; setTimeout(()=> topProgress.style.width = '30%', 150); }); });
-
-        // Accessibility: focus visible outline for segmented buttons
-        buttons.forEach(b => { b.addEventListener('focus', () => b.style.outline = '2px solid rgba(86,99,235,0.18)'); b.addEventListener('blur', () => b.style.outline = 'none'); });
+        // Accessibility: focus visible outline for buttons (removed undefined reference)
+        const allButtons = document.querySelectorAll('button');
+        allButtons.forEach(b => { b.addEventListener('focus', () => b.style.outline = '2px solid rgba(86,99,235,0.18)'); b.addEventListener('blur', () => b.style.outline = 'none'); });
     })();
 
 /* Chunked upload support: improves large file uploads by sending in smaller parts with progress. */
@@ -883,25 +861,37 @@
                 contentType = 'presentation';
             }
 
-            // Start progress UI
-            const topProgress = document.getElementById('topProgress');
-            topProgress.style.transition = 'width 120ms linear';
-            const onProgress = (uploaded, total) => {
-                const pct = Math.floor((uploaded / total) * 100);
-                topProgress.style.width = pct + '%';
-            };
+            // Start progress UI based on content type
+            let progressBar, progressWrap;
+            if (contentType === 'presentation') {
+                progressBar = document.getElementById('presentationProgress');
+                progressWrap = document.getElementById('presentationProgressWrap');
+            } else {
+                progressBar = document.getElementById('videoProgress');
+                progressWrap = document.getElementById('videoProgressWrap');
+            }
+            
+            if (progressBar && progressWrap) {
+                progressWrap.style.display = 'block';
+                progressBar.style.transition = 'width 120ms linear';
+                const onProgress = (uploaded, total) => {
+                    const pct = Math.floor((uploaded / total) * 100);
+                    progressBar.style.width = pct + '%';
+                };
 
-            try {
-                await uploadFileInChunks(file, contentType, onProgress);
-                // finish progress and reload page so server shows the new file
-                topProgress.style.width = '100%';
-                setTimeout(() => { location.reload(); }, 400);
-            } catch (err) {
-                alert('Upload failed. Falling back to normal upload. Please try again.');
-                // reset progress and allow normal submit as fallback
-                topProgress.style.width = '0%';
-                // Optionally submit the form normally as fallback (commented out to avoid double-uploads)
-                // form.submit();
+                try {
+                    await uploadFileInChunks(file, contentType, onProgress);
+                    // finish progress then reload so new files + checkboxes are rendered
+                    progressBar.style.width = '100%';
+                    setTimeout(() => { location.reload(); }, 400);
+                } catch (err) {
+                    alert('Upload failed. Falling back to normal upload. Please try again.');
+                    // reset progress and allow normal submit as fallback
+                    progressBar.style.width = '0%';
+                    progressWrap.style.display = 'none';
+                    // Optionally submit the form normally as fallback (commented out to avoid double-uploads)
+                    // form.submit();
+                }
             }
         });
     });
@@ -912,22 +902,30 @@
     const checkboxes = document.querySelectorAll('.playlist-checkbox');
     checkboxes.forEach(checkbox => {
         checkbox.addEventListener('change', async (e) => {
-            const filename = e.target.dataset.filename;
-            const contentType = e.target.dataset.contentType;
-            
+            // support both data-file and data-filename (backwards compatibility)
+            const dataset = e.target.dataset || {};
+            const filename = dataset.file || dataset.filename || dataset.name || '';
+            const contentType = dataset.contentType || dataset.content_type || e.target.getAttribute('data-content-type') || 'video';
+
+            if (!filename) {
+                console.error('Playlist toggle: no filename/url found on checkbox', e.target);
+                alert('Failed to update playlist: missing filename');
+                e.target.checked = !e.target.checked;
+                return;
+            }
+
             try {
                 const response = await fetch(`/control/toggle_playlist/${contentType}/${encodeURIComponent(filename)}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
                 });
-                
+
                 const data = await response.json();
                 if (!data.ok) {
                     alert('Failed to update playlist: ' + (data.error || 'Unknown error'));
                     e.target.checked = !e.target.checked; // revert
-                }
-                else {
-                    // refresh the playlist panel to reflect changes
+                } else {
+                    // success — refresh playlist panel to reflect changes
                     fetchPlaylistOrder().catch(()=>{});
                 }
             } catch (err) {
@@ -938,6 +936,7 @@
         });
     });
 })();
+
 
 // Playlist panel: fetch, render, reorder & save
 async function fetchPlaylistOrder(){
@@ -1034,8 +1033,12 @@ function renderPlaylistPanel(items){
     }
 }
 
-// initial load
+// Initial load and refresh on page show
 document.addEventListener('DOMContentLoaded', ()=>{ fetchPlaylistOrder().catch(()=>{}); });
+window.addEventListener('pageshow', ()=>{ fetchPlaylistOrder().catch(()=>{}); });
+
+// Auto-refresh playlist every 5 seconds to catch uploads
+setInterval(()=>{ fetchPlaylistOrder().catch(()=>{}); }, 5000);
 
 // System stats: define functions first, then attach listeners
 function getBarClass(percent){

@@ -64,13 +64,14 @@
             justify-content: center;
         }
         
-        video, img {
+        video, img, iframe#youtube-player {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
             object-fit: cover;
+            border: none;
         }
         
         .hidden {
@@ -95,6 +96,7 @@
         <div id="loading" class="hidden">Loading...</div>
         <video id="video-player" class="hidden" autoplay playsinline muted></video>
         <img id="image-player" class="hidden">
+        <iframe id="youtube-player" class="hidden" allow="autoplay"></iframe>
     </div>
 
     <script>
@@ -106,11 +108,15 @@
         let isPlaying = false;
         let fetchInterval = null;
         
+        // Force fetch on page load by resetting hash
+        window.addEventListener('pageshow', ()=>{ playlistHash = null; });
+        
         const videoPlayer = document.getElementById('video-player');
         const imagePlayer = document.getElementById('image-player');
         const loading = document.getElementById('loading');
         const fullscreenPrompt = document.getElementById('fullscreen-prompt');
         const fullscreenBtn = document.getElementById('fullscreen-btn');
+        const youtubePlayer = document.getElementById('youtube-player');
         
         // FIXED: Simple click handler without debug overhead
         fullscreenBtn.onclick = function() {
@@ -217,9 +223,45 @@
                     isPlaying = false;
                     nextItem();
                 }, (item.duration || 10) * 1000);
+            } else if (item.type === 'youtube') {
+                videoPlayer.classList.add('hidden');
+                imagePlayer.classList.add('hidden');
+                youtubePlayer.classList.remove('hidden');
+
+                // Convert URL to embeddable format and add autoplay parameter
+                const embedUrl = convertToEmbed(item.url);
+                youtubePlayer.src = embedUrl + (embedUrl.includes('?') ? '&' : '?') + 'autoplay=1&mute=0&rel=0';
+
+                // Use estimated duration (5 minutes default) or YouTube API for exact duration
+                const estimatedDuration = 300000; // 5 minutes in milliseconds
+                setTimeout(() => {
+                    youtubePlayer.classList.add('hidden');
+                    youtubePlayer.src = '';
+                    isPlaying = false;
+                    nextItem();
+                }, estimatedDuration);
             }
         }
         
+        function convertToEmbed(url) {
+            // Handle youtube.com/watch?v=VIDEO_ID format
+            if (url.includes('youtube.com/watch?v=')) {
+                const videoId = url.split('watch?v=')[1].split('&')[0];
+                return `https://www.youtube.com/embed/${videoId}`;
+            }
+            // Handle youtu.be/VIDEO_ID format
+            if (url.includes('youtu.be/')) {
+                const videoId = url.split('youtu.be/')[1].split('?')[0];
+                return `https://www.youtube.com/embed/${videoId}`;
+            }
+            // Handle already embedded URLs
+            if (url.includes('youtube.com/embed/')) {
+                return url;
+            }
+            // Fallback: return as-is
+            return url;
+        }
+
         function nextItem() {
             currentIndex = (currentIndex + 1) % playlist.length;
             isPlaying = false;

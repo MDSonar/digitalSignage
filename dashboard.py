@@ -6,6 +6,7 @@ Digital Signage Web Dashboard
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, send_from_directory
 from werkzeug.utils import secure_filename
 from werkzeug.security import check_password_hash, generate_password_hash
+from urllib.parse import unquote
 from functools import wraps
 import os
 from pathlib import Path
@@ -18,6 +19,7 @@ import sys
 import json
 from pathlib import PurePath
 import platform
+import hashlib
 
 # Optional: psutil for system stats (graceful degradation if not installed)
 try:
@@ -41,6 +43,7 @@ app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
 VIDEOS_DIR = Path.home() / 'signage' / 'content' / 'videos'
 PRESENTATIONS_DIR = Path.home() / 'signage' / 'content' / 'presentations'
+YOUTUBE_LINKS_FILE = Path.home() / 'signage' / 'youtube_links.json'
 CACHE_DIR = Path.home() / 'signage' / 'cache' / 'slides'  # NEW: Cache directory
 CONFIG_FILE = Path.home() / 'signage' / 'config.json'
 PLAYLIST_FILE = Path.home() / 'signage' / 'playlist.json'
@@ -105,21 +108,14 @@ def get_file_size_from_bytes(size):
         size /= 1024.0
     return f"{size:.1f} TB"
 
-
-def read_config():
-    try:
-        if CONFIG_FILE.exists():
-            return json.loads(CONFIG_FILE.read_text())
-    except Exception:
-        logger.exception('Failed to read config')
-    # default
-    return {'mode': 'both'}
-
-
 def read_playlist():
     try:
-        if PLAYLIST_FILE.exists():
-            return json.loads(PLAYLIST_FILE.read_text())
+        if not PLAYLIST_FILE.exists():
+            # initialize empty playlist file for first-time runs
+            PLAYLIST_FILE.parent.mkdir(parents=True, exist_ok=True)
+            PLAYLIST_FILE.write_text(json.dumps([]))
+            return []
+        return json.loads(PLAYLIST_FILE.read_text())
     except Exception:
         logger.exception('Failed to read playlist')
     return []
@@ -134,9 +130,25 @@ def write_playlist(lst):
         logger.exception('Failed to write playlist')
         return False
 
+def read_youtube_links():
+    try:
+        if YOUTUBE_LINKS_FILE.exists():
+            return json.loads(YOUTUBE_LINKS_FILE.read_text())
+    except Exception:
+        logger.exception("Failed to read youtube links")
+    return []
+
+def write_youtube_links(data):
+    try:
+        YOUTUBE_LINKS_FILE.write_text(json.dumps(data))
+        return True
+    except Exception:
+        logger.exception("Failed to write youtube links")
+        return False
+
 
 def normalize_playlist_to_objects(raw):
-    """Return playlist as list of objects: {'name':..., 'repeats': int}
+    """Return playlist as list of objects: {'name':..., 'repeats': int, 'type': ...}
     Accepts legacy list of strings or list of objects and returns normalized list.
     """
     out = []
@@ -146,6 +158,18 @@ def normalize_playlist_to_objects(raw):
         for item in raw:
             if isinstance(item, str):
                 out.append({'name': item, 'repeats': 1})
+            elif isinstance(item, dict) and item.get('type') == 'youtube':
+                url = item.get('url') or item.get('name')
+                try:
+                    repeats_val = int(item.get('repeats', 1))
+                except Exception:
+                    repeats_val = 1
+                out.append({
+                    'name': url,
+                    'url': url,
+                    'type': 'youtube',
+                    'repeats': repeats_val
+                })
             elif isinstance(item, dict):
                 name = item.get('name') or item.get('filename')
                 try:
@@ -153,7 +177,12 @@ def normalize_playlist_to_objects(raw):
                 except Exception:
                     repeats = 1
                 if name:
-                    out.append({'name': name, 'repeats': max(1, repeats)})
+                    # Preserve type if present
+                    obj = {'name': name, 'repeats': max(1, repeats)}
+                    if item.get('type'):
+                        obj['type'] = item.get('type')
+                    out.append(obj)
+
     return out
 
 
@@ -166,11 +195,37 @@ def playlist_names_set(raw):
         for item in raw:
             if isinstance(item, str):
                 s.add(item)
+            elif isinstance(item, dict) and item.get('type') == 'youtube':
+                s.add(item.get('url') or item.get('name'))
             elif isinstance(item, dict):
                 n = item.get('name') or item.get('filename')
                 if n:
                     s.add(n)
+
     return s
+
+
+def remove_from_playlist(name_or_url: str) -> bool:
+    """Remove any playlist entries matching the given name or URL."""
+    try:
+        raw = read_playlist()
+        items = normalize_playlist_to_objects(raw)
+        filtered = [it for it in items if (it.get('name') != name_or_url and it.get('url') != name_or_url)]
+        if len(filtered) != len(items):
+            return write_playlist(filtered)
+    except Exception:
+        logger.exception('Failed to remove item from playlist')
+    return False
+
+
+def read_config():
+    """Read configuration from config file."""
+    try:
+        if CONFIG_FILE.exists():
+            return json.loads(CONFIG_FILE.read_text())
+    except Exception:
+        logger.exception('Failed to read config')
+    return {}
 
 
 def write_config(cfg: dict):
@@ -206,11 +261,15 @@ def is_process_running(pidfile: Path, expected_cmd_substr: str = None):
     except Exception:
         return False
     if expected_cmd_substr:
-        try:
-            cmdline = Path(f"/proc/{pid}/cmdline").read_text().replace('\x00', ' ')
-            return expected_cmd_substr in cmdline
-        except Exception:
-            return False
+        # Only verify cmdline on Linux where /proc filesystem is available
+        if platform.system() == 'Linux':
+            try:
+                cmdline = Path(f"/proc/{pid}/cmdline").read_text().replace('\x00', ' ')
+                return expected_cmd_substr in cmdline
+            except Exception:
+                return False
+        # On other platforms, just return True if process exists
+        # (less precise but prevents crashes)
     return True
 
 
@@ -221,7 +280,15 @@ def start_process(cmd: list, pidfile: Path):
         stdout_log = LOGS_DIR / f"{Path(cmd[-1]).stem}.out.log"
         stderr_log = LOGS_DIR / f"{Path(cmd[-1]).stem}.err.log"
         logger.info("Starting process: %s, stdout=%s, stderr=%s", cmd, stdout_log, stderr_log)
-        proc = subprocess.Popen(cmd, stdout=open(stdout_log, 'ab'), stderr=open(stderr_log, 'ab'), preexec_fn=os.setsid, close_fds=True)
+        
+        # Windows compatibility: use CREATE_NEW_PROCESS_GROUP instead of os.setsid
+        if platform.system() == 'Windows':
+            proc = subprocess.Popen(cmd, stdout=open(stdout_log, 'ab'), stderr=open(stderr_log, 'ab'), 
+                                  creationflags=subprocess.CREATE_NEW_PROCESS_GROUP, close_fds=False)
+        else:
+            proc = subprocess.Popen(cmd, stdout=open(stdout_log, 'ab'), stderr=open(stderr_log, 'ab'), 
+                                  preexec_fn=os.setsid, close_fds=True)
+        
         pidfile.parent.mkdir(parents=True, exist_ok=True)
         pidfile.write_text(str(proc.pid))
         logger.info(f"Started process {cmd[0]} pid={proc.pid}")
@@ -238,12 +305,23 @@ def stop_process(pidfile: Path):
         raw = pidfile.read_text().strip()
         pid = int(raw)
 
-        # Try graceful terminate of the process group (we started with setsid)
+        # Try graceful terminate of the process group
         try:
-            os.killpg(pid, signal.SIGTERM)
+            if platform.system() == 'Windows':
+                # Windows: use taskkill for process tree termination
+                subprocess.run(['taskkill', '/F', '/T', '/PID', str(pid)], 
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            else:
+                # POSIX: use killpg to terminate process group
+                os.killpg(pid, signal.SIGTERM)
         except Exception:
             try:
-                os.kill(pid, signal.SIGTERM)
+                # Fallback to killing single process
+                if platform.system() == 'Windows':
+                    subprocess.run(['taskkill', '/F', '/PID', str(pid)], 
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                else:
+                    os.kill(pid, signal.SIGTERM)
             except Exception:
                 logger.warning('Failed to SIGTERM pid/pgrp=%s', pid)
 
@@ -257,10 +335,16 @@ def stop_process(pidfile: Path):
 
         # If still running, force kill the group
         try:
-            os.killpg(pid, signal.SIGKILL)
+            if platform.system() == 'Windows':
+                # Already killed forcefully with /F flag above
+                pass
+            else:
+                # POSIX: force kill with SIGKILL
+                os.killpg(pid, signal.SIGKILL)
         except Exception:
             try:
-                os.kill(pid, signal.SIGKILL)
+                if platform.system() != 'Windows':
+                    os.kill(pid, signal.SIGKILL)
             except Exception:
                 logger.warning('Failed to SIGKILL pid/pgrp=%s', pid)
 
@@ -370,21 +454,42 @@ def upload_chunk(content_type):
             except Exception:
                 logger.exception('Failed to cleanup tmp upload dir')
 
-            # If presentation, trigger background conversion like in upload_file
-            if content_type == 'presentation':
-                try:
-                    python = sys.executable or 'python3'
-                    script = Path(__file__).parent / 'player.py'
-                    subprocess.Popen([python, str(script), '--convert', str(final_path)],
-                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
-                    logger.info(f"Spawned background converter for (chunked): {safe_name}")
-                except Exception:
-                    logger.exception('Failed to spawn converter process for chunked upload')
+            # Note: Presentation conversion to slides is not performed in this setup
+            # Web player uses native video playback instead of slide conversion
 
         return jsonify({'ok': True, 'index': index, 'total': total})
     except Exception:
         logger.exception('Chunk upload failed')
         return jsonify({'ok': False, 'error': 'server error'}), 500
+
+@app.route('/add_youtube_link', methods=['POST'])
+@login_required
+def add_youtube_link():
+    url = request.form.get('youtube_url', "").strip()
+    name = request.form.get('youtube_name', "").strip() or url
+
+    if not url or (("youtube.com" not in url) and ("youtu.be" not in url)):
+        flash("Invalid YouTube link", "error")
+        return redirect(url_for('dashboard'))
+
+    links = read_youtube_links()
+    links.append({"name": name, "url": url})
+    write_youtube_links(links)
+
+    flash("YouTube link added!", "success")
+    return redirect(url_for('dashboard'))
+
+@app.route('/delete_youtube_link', methods=['POST'])
+@login_required
+def delete_youtube_link():
+    url = request.form.get("url")
+    links = read_youtube_links()
+    links = [l for l in links if l["url"] != url]
+    write_youtube_links(links)
+    # Also remove from playlist if present
+    remove_from_playlist(url)
+    flash("YouTube link deleted!", "success")
+    return redirect(url_for("dashboard"))
 
 @app.route('/')
 def index():
@@ -416,6 +521,8 @@ def logout():
 def dashboard():
     videos = []
     presentations = []
+    youtube_links = []
+    yt_data = read_youtube_links()
     playlist = read_playlist()
     playlist_set = playlist_names_set(playlist)
     
@@ -444,39 +551,93 @@ def dashboard():
                         'format': get_file_format(file),
                         'in_playlist': file.name in playlist_set
                     })
+
+        for item in yt_data:
+            youtube_links.append({
+                "name": item.get("name"),
+                "url": item.get("url"),
+                "type": "youtube",
+                "in_playlist": item.get("url") in playlist_set
+            })
         
     except Exception as e:
         logger.error(f"Error loading dashboard: {e}", exc_info=True)
         flash('Error loading files', 'error')
     
-    # read current config and process status
-    cfg = read_config()
+    # Check process status
     web_running = is_process_running(WEB_PLAYER_PID, 'web_player.py')
-    signage_running = is_process_running(SIGNAGE_PLAYER_PID, 'player.py')
 
     return render_template('dashboard.html', 
                         videos=videos, 
                         presentations=presentations, 
+                        youtube_links=youtube_links,
                         username=session.get('username'),
-                        mode=cfg.get('mode', 'both'),
                         web_running=web_running,
-                        signage_running=signage_running,
                         playlist=playlist,
                         playlist_set=playlist_set)
 
 
-@app.route('/control/toggle_playlist/<content_type>/<filename>', methods=['POST'])
-@login_required
+@app.route('/control/toggle_playlist/<content_type>/<path:filename>', methods=['POST'])
+# Made public so playlist toggles don't break if session cookies expire during long dashboard use
 def toggle_playlist(content_type, filename):
-    """Toggle a file in/out of the playlist"""
-    if content_type not in ('video', 'presentation'):
-        return jsonify({'ok': False, 'error': 'invalid content type'}), 400
+    """Toggle an item (video/presentation/youtube) in/out of the playlist"""
+
+    # decode URL encoded filename/url (client sends encodeURIComponent(...))
+    filename = unquote(filename)
     
+    logger.info(f"Toggle playlist request - type: {content_type}, filename: {filename}")
+
+    # Allow YouTube links
+    if content_type not in ('video', 'presentation', 'youtube'):
+        logger.error(f"Invalid content type: {content_type}")
+        return jsonify({'ok': False, 'error': 'invalid content type'}), 400
+
     try:
         raw = read_playlist()
         items = normalize_playlist_to_objects(raw)
+        logger.info(f"Current playlist items: {len(items)}")
 
-        # Check if filename present
+        # -----------------------------
+        # SPECIAL HANDLING: YOUTUBE LINK
+        # -----------------------------
+        if content_type == 'youtube':
+            # normalize filename/url for matching
+            target_url = filename
+
+            # Check if URL already exists (match on name or url field)
+            found = None
+            for it in items:
+                if it.get('type') == 'youtube' and (it.get('name') == target_url or it.get('url') == target_url):
+                    found = it
+                    break
+
+            if found:
+                # Remove it
+                items = [
+                    it for it in items
+                    if not (it.get('type') == 'youtube' and (it.get('name') == target_url or it.get('url') == target_url))
+                ]
+                in_playlist = False
+            else:
+                # Add new YouTube entry
+                items.append({
+                    'name': target_url,   # This is the URL
+                    'url': target_url,
+                    'type': 'youtube',
+                    'repeats': 1
+                })
+                in_playlist = True
+
+            ok = write_playlist(items)
+            if not ok:
+                logger.error("Failed to write playlist to file")
+                return jsonify({'ok': False, 'error': 'failed to save playlist'}), 500
+            logger.info(f"YouTube toggle success - in_playlist: {in_playlist}")
+            return jsonify({'ok': True, 'in_playlist': in_playlist, 'filename': filename})
+
+        # -----------------------------
+        # NORMAL HANDLING (video/presentation)
+        # -----------------------------
         found = None
         for it in items:
             if it.get('name') == filename:
@@ -484,40 +645,27 @@ def toggle_playlist(content_type, filename):
                 break
 
         if found:
-            # remove all entries matching this name
+            # Remove entries
             items = [it for it in items if it.get('name') != filename]
             in_playlist = False
         else:
-            items.append({'name': filename, 'repeats': 1})
+            # Add new entry — include explicit type for clarity
+            items.append({'name': filename, 'type': content_type, 'repeats': 1})
             in_playlist = True
 
         ok = write_playlist(items)
         if ok:
+            logger.info(f"Toggle success for {filename} - in_playlist: {in_playlist}")
             return jsonify({'ok': True, 'in_playlist': in_playlist, 'filename': filename})
         else:
+            logger.error("Failed to write playlist")
             return jsonify({'ok': False, 'error': 'failed to save'}), 500
+
     except Exception as e:
         logger.exception('Failed to toggle playlist')
         return jsonify({'ok': False, 'error': str(e)}), 500
 
-
-@app.route('/control/set_mode', methods=['POST'])
-@login_required
-def set_mode():
-    mode = request.form.get('mode', 'both')
-    if mode not in ('both', 'video', 'presentation'):
-        flash('Invalid mode', 'error')
-        return redirect(url_for('dashboard'))
-    ok = write_config({'mode': mode})
-    if ok:
-        flash(f'Mode set to: {mode}', 'success')
-    else:
-        flash('Failed to save mode', 'error')
-    return redirect(url_for('dashboard'))
-
-
 @app.route('/api/playlist_order', methods=['GET'])
-@login_required
 def api_playlist_order_get():
     """Return normalized playlist (ordered) as list of objects {name, repeats}."""
     try:
@@ -529,10 +677,22 @@ def api_playlist_order_get():
         return jsonify({'ok': False, 'error': 'server error'}), 500
 
 
+# Public playlist endpoint for diagnostics and player checks (no auth)
+@app.route('/api/playlist', methods=['GET'])
+def api_playlist():
+    try:
+        raw = read_playlist()
+        playlist = normalize_playlist_to_objects(raw)
+        playlist_hash = hashlib.md5(json.dumps(playlist, sort_keys=True).encode()).hexdigest()
+        return jsonify({'playlist': playlist, 'hash': playlist_hash, 'count': len(playlist)})
+    except Exception:
+        logger.exception('Failed to return playlist')
+        return jsonify({'ok': False, 'error': 'server error'}), 500
+
+
 @app.route('/api/playlist_order', methods=['POST'])
-@login_required
 def api_playlist_order_post():
-    """Accept a JSON array of objects {name, repeats} and save as the playlist order."""
+    """Accept a JSON array of objects {name, repeats, [type]} and save as the playlist order."""
     try:
         data = request.get_json()
         if not isinstance(data, list):
@@ -540,17 +700,37 @@ def api_playlist_order_post():
 
         normalized = []
         for entry in data:
+            # Allow caller to supply string (name) or dict
             if isinstance(entry, str):
-                normalized.append({'name': entry, 'repeats': 1})
+                # detect youtube-like urls and tag appropriately
+                if entry.startswith('http') and ('youtube.com' in entry or 'youtu.be' in entry):
+                    normalized.append({'name': entry, 'type': 'youtube', 'repeats': 1})
+                else:
+                    normalized.append({'name': entry, 'repeats': 1})
             elif isinstance(entry, dict):
-                name = entry.get('name')
+                name = entry.get('name') or entry.get('url') or entry.get('filename')
                 if not name:
                     continue
                 try:
                     repeats = int(entry.get('repeats', 1))
                 except Exception:
                     repeats = 1
-                normalized.append({'name': name, 'repeats': max(1, repeats)})
+
+                # preserve type if provided, otherwise infer youtube by URL
+                etype = entry.get('type')
+                if not etype:
+                    if isinstance(name, str) and name.startswith('http') and ('youtube.com' in name or 'youtu.be' in name):
+                        etype = 'youtube'
+
+                item = {'name': name, 'repeats': max(1, repeats)}
+                if etype:
+                    item['type'] = etype
+                    # prefer explicit url key for youtube if available
+                    if etype == 'youtube':
+                        # keep both fields safe: some code expects item['url']
+                        item['url'] = entry.get('url') or name
+
+                normalized.append(item)
 
         ok = write_playlist(normalized)
         if ok:
@@ -560,7 +740,6 @@ def api_playlist_order_post():
     except Exception:
         logger.exception('Failed to save playlist order')
         return jsonify({'ok': False, 'error': 'server error'}), 500
-
 
 @app.route('/control/start_web_player', methods=['POST'])
 @login_required
@@ -587,21 +766,14 @@ def stop_web_player():
 @app.route('/control/start_signage_player', methods=['POST'])
 @login_required
 def start_signage_player():
-    if is_process_running(SIGNAGE_PLAYER_PID, 'player.py'):
-        flash('Signage player already running', 'error')
-        return redirect(url_for('dashboard'))
-    python = sys.executable or 'python3'
-    script = Path(__file__).parent / 'player.py'
-    ok = start_process([python, str(script)], SIGNAGE_PLAYER_PID)
-    flash('Signage player started' if ok else 'Failed to start signage player', 'success' if ok else 'error')
+    flash('HDMI player (player.py) is not deployed in this setup. Use Web Player instead.', 'info')
     return redirect(url_for('dashboard'))
 
 
 @app.route('/control/stop_signage_player', methods=['POST'])
 @login_required
 def stop_signage_player():
-    ok = stop_process(SIGNAGE_PLAYER_PID)
-    flash('Signage player stopped' if ok else 'Failed to stop signage player', 'success' if ok else 'error')
+    flash('HDMI player (player.py) is not deployed in this setup.', 'info')
     return redirect(url_for('dashboard'))
 
 @app.route('/upload/<content_type>', methods=['POST'])
@@ -657,19 +829,8 @@ def upload_file(content_type):
             file_size = get_file_size(filepath)
             flash(f'✓ Uploaded: {filename} ({file_size}) in {elapsed:.1f}s', 'success')
             logger.info(f"Upload complete: {filename} ({file_size}) in {elapsed:.1f}s")
-            # If this is a presentation, trigger conversion in background so player process
-            # doesn't need to be running. This ensures conversion happens even if the
-            # signage player (HDMI) is stopped.
-            if content_type == 'presentation':
-                try:
-                    python = sys.executable or 'python3'
-                    script = Path(__file__).parent / 'player.py'
-                    # spawn as detached background process
-                    subprocess.Popen([python, str(script), '--convert', str(filepath)],
-                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
-                    logger.info(f"Spawned background converter for: {filename}")
-                except Exception:
-                    logger.exception('Failed to spawn converter process')
+            # Note: Presentation conversion to slides is not performed in this setup
+            # Web player uses native video playback instead of slide conversion
         else:
             flash('Upload failed: File not saved', 'error')
             logger.error(f"File not found after save: {filepath}")
@@ -703,6 +864,8 @@ def delete_file(content_type, filename):
             filepath.unlink()
             flash(f'✓ Deleted: {filename}', 'success')
             logger.info(f"Deleted {content_type}: {filename}")
+            # Ensure playlist no longer references this file
+            remove_from_playlist(filename)
         else:
             flash(f'File not found: {filename}', 'error')
             
