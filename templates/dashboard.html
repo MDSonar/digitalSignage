@@ -406,99 +406,6 @@
                     </div>
                 </div>
 
-                <!-- YouTube Card (Add + Links merged) -->
-                <div class="card" aria-labelledby="youtubeHeading" style="margin-bottom:12px">
-                    <div class="section-header"><h2 id="youtubeHeading">🎬 YouTube Videos</h2></div>
-
-                    <!-- Add YouTube Form -->
-                    <div class="upload-form" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid rgba(15,23,42,0.08)">
-                        <form action="{{ url_for('add_youtube_link') }}" method="POST" aria-label="Add YouTube link form">
-                            
-                            <div style="display:flex;flex-direction:column;gap:10px">
-                                <div style="display:flex;flex-direction:column;gap:6px">
-                                    <label for="youtube_url" style="font-weight:600;color:var(--text);font-size:0.9rem">YouTube URL *</label>
-                                    <input 
-                                        type="url" 
-                                        id="youtube_url"
-                                        name="youtube_url" 
-                                        placeholder="https://www.youtube.com/watch?v=..." 
-                                        required 
-                                        style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(15,23,42,0.12);font-size:0.95rem;transition:border-color 0.2s"
-                                        onfocus="this.style.borderColor='var(--accent)'"
-                                        onblur="this.style.borderColor='rgba(15,23,42,0.12)'"
-                                    />
-                                    <small style="color:var(--muted);font-size:0.85rem">Paste a YouTube video link (e.g., youtube.com/watch?v=... or youtu.be/...)</small>
-                                </div>
-
-                                <div style="display:flex;flex-direction:column;gap:6px">
-                                    <label for="youtube_name" style="font-weight:600;color:var(--text);font-size:0.9rem">Display Name (Optional)</label>
-                                    <input 
-                                        type="text" 
-                                        id="youtube_name"
-                                        name="youtube_name" 
-                                        placeholder="My Video Title" 
-                                        style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(15,23,42,0.12);font-size:0.95rem;transition:border-color 0.2s"
-                                        onfocus="this.style.borderColor='var(--accent)'"
-                                        onblur="this.style.borderColor='rgba(15,23,42,0.12)'"
-                                    />
-                                    <small style="color:var(--muted);font-size:0.85rem">Leave blank to use the URL as the name</small>
-                                </div>
-                            </div>
-
-                            <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:6px">
-                                <button type="submit" class="save-mode-btn" aria-label="Add YouTube video">Add Video</button>
-                            </div>
-                        </form>
-                    </div>
-
-                    <!-- YouTube Links List -->
-                    <div style="margin-bottom:8px;color:var(--muted);font-size:0.88rem;font-weight:600">Your YouTube Videos</div>
-                    <div class="files-list">
-                        {% if youtube_links %}
-                            {% for yt in youtube_links %}
-                                <div class="file-item" role="listitem">
-                                    <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
-                                        
-                                        <!-- Checkbox: consistent with video card -->
-                                        <input
-                                            type="checkbox"
-                                            class="playlist-checkbox"
-                                            data-filename="{{ yt.url }}"
-                                            data-content-type="youtube"
-                                            {% if yt.in_playlist %}checked{% endif %}
-                                            aria-label="Add {{ yt.name }} to playlist"
-                                        >
-
-                                        <!-- Info block -->
-                                        <div class="file-info">
-                                            <div class="file-name">{{ yt.name }}</div>
-                                            <div class="file-size">{{ yt.url }}</div>
-                                        </div>
-                                    </div>
-
-                                    <div class="file-actions">
-                                        <!-- Badge (always YT) -->
-                                        <span class="file-badge badge-youtube">YOUTUBE</span>
-
-                                        <!-- Delete button -->
-                                        <form class="delete-form"
-                                            action="{{ url_for('delete_youtube_link') }}"
-                                            method="POST"
-                                            onsubmit="return confirm('Delete {{ yt.name }}?')">
-                                            <input type="hidden" name="url" value="{{ yt.url }}">
-                                            <button type="submit" class="delete-btn" aria-label="Delete {{ yt.name }}">Delete</button>
-                                        </form>
-                                    </div>
-                                </div>
-                            {% endfor %}
-                        {% else %}
-                            <div class="file-item" style="justify-content:center">
-                                <div class="muted">No YouTube links added yet</div>
-                            </div>
-                        {% endif %}
-                    </div>
-                </div>
-
                 <!-- Video Upload Progress Bar -->
                 <div class="progress-wrap" aria-hidden="true" id="videoProgressWrap" style="display:none">
                     <div id="videoProgress" class="progress" style="width:0%"></div>
@@ -617,6 +524,99 @@
                             {% endfor %}
                         {% else %}
                             <div class="file-item" style="justify-content:center"><div class="muted">No presentations uploaded yet</div></div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- YouTube Card (Add + Links merged) -->
+                <div class="card" aria-labelledby="youtubeHeading" style="margin-bottom:12px">
+                    <div class="section-header"><h2 id="youtubeHeading">🎬 YouTube Videos</h2></div>
+
+                    <!-- Add YouTube Form -->
+                    <div class="upload-form" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid rgba(15,23,42,0.08)">
+                        <form action="{{ url_for('add_youtube_link') }}" method="POST" aria-label="Add YouTube link form">
+                            
+                            <div style="display:flex;flex-direction:column;gap:10px">
+                                <div style="display:flex;flex-direction:column;gap:6px">
+                                    <label for="youtube_url" style="font-weight:600;color:var(--text);font-size:0.9rem">YouTube URL *</label>
+                                    <input 
+                                        type="url" 
+                                        id="youtube_url"
+                                        name="youtube_url" 
+                                        placeholder="https://www.youtube.com/watch?v=..." 
+                                        required 
+                                        style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(15,23,42,0.12);font-size:0.95rem;transition:border-color 0.2s"
+                                        onfocus="this.style.borderColor='var(--accent)'"
+                                        onblur="this.style.borderColor='rgba(15,23,42,0.12)'"
+                                    />
+                                    <small style="color:var(--muted);font-size:0.85rem">Paste a YouTube video link (e.g., youtube.com/watch?v=... or youtu.be/...)</small>
+                                </div>
+
+                                <div style="display:flex;flex-direction:column;gap:6px">
+                                    <label for="youtube_name" style="font-weight:600;color:var(--text);font-size:0.9rem">Display Name (Optional)</label>
+                                    <input 
+                                        type="text" 
+                                        id="youtube_name"
+                                        name="youtube_name" 
+                                        placeholder="My Video Title" 
+                                        style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(15,23,42,0.12);font-size:0.95rem;transition:border-color 0.2s"
+                                        onfocus="this.style.borderColor='var(--accent)'"
+                                        onblur="this.style.borderColor='rgba(15,23,42,0.12)'"
+                                    />
+                                    <small style="color:var(--muted);font-size:0.85rem">Leave blank to use the URL as the name</small>
+                                </div>
+                            </div>
+
+                            <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:6px">
+                                <button type="submit" class="save-mode-btn" aria-label="Add YouTube video">Add Video</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- YouTube Links List -->
+                    <div style="margin-bottom:8px;color:var(--muted);font-size:0.88rem;font-weight:600">Your YouTube Videos</div>
+                    <div class="files-list">
+                        {% if youtube_links %}
+                            {% for yt in youtube_links %}
+                                <div class="file-item" role="listitem">
+                                    <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
+                                        
+                                        <!-- Checkbox: consistent with video card -->
+                                        <input
+                                            type="checkbox"
+                                            class="playlist-checkbox"
+                                            data-filename="{{ yt.url }}"
+                                            data-content-type="youtube"
+                                            {% if yt.in_playlist %}checked{% endif %}
+                                            aria-label="Add {{ yt.name }} to playlist"
+                                        >
+
+                                        <!-- Info block -->
+                                        <div class="file-info">
+                                            <div class="file-name">{{ yt.name }}</div>
+                                            <div class="file-size">{{ yt.url }}</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="file-actions">
+                                        <!-- Badge (always YT) -->
+                                        <span class="file-badge badge-youtube">YOUTUBE</span>
+
+                                        <!-- Delete button -->
+                                        <form class="delete-form"
+                                            action="{{ url_for('delete_youtube_link') }}"
+                                            method="POST"
+                                            onsubmit="return confirm('Delete {{ yt.name }}?')">
+                                            <input type="hidden" name="url" value="{{ yt.url }}">
+                                            <button type="submit" class="delete-btn" aria-label="Delete {{ yt.name }}">Delete</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="file-item" style="justify-content:center">
+                                <div class="muted">No YouTube links added yet</div>
+                            </div>
                         {% endif %}
                     </div>
                 </div>

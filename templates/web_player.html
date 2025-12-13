@@ -94,10 +94,14 @@
     
     <div id="player-container">
         <div id="loading" class="hidden">Loading...</div>
-        <video id="video-player" class="hidden" autoplay playsinline muted></video>
+        <video id="video-player" class="hidden" autoplay playsinline></video>
         <img id="image-player" class="hidden">
-        <iframe id="youtube-player" class="hidden" allow="autoplay"></iframe>
+        <div id="youtube-container" class="hidden">
+            <iframe id="youtube-player" style="width:100%;height:100%;border:none;" allow="autoplay"></iframe>
+        </div>
     </div>
+
+    <script src="https://www.youtube.com/iframe_api"></script>
 
     <script>
         console.log('Web Player v1.3 - Optimized');
@@ -107,6 +111,13 @@
         let playlistHash = null;
         let isPlaying = false;
         let fetchInterval = null;
+        let youtubePlayer = null;
+        let youtubePlayerReady = false;
+        let youtubeEndTimer = null;
+        let pendingYoutubeId = null;
+        let pendingYoutubeDurationSec = null;
+        let youtubeStartTs = null;
+        let youtubeMaxMs = null;
         
         // Force fetch on page load by resetting hash
         window.addEventListener('pageshow', ()=>{ playlistHash = null; });
@@ -116,7 +127,8 @@
         const loading = document.getElementById('loading');
         const fullscreenPrompt = document.getElementById('fullscreen-prompt');
         const fullscreenBtn = document.getElementById('fullscreen-btn');
-        const youtubePlayer = document.getElementById('youtube-player');
+        const youtubeContainer = document.getElementById('youtube-container');
+        const youtubeIframe = document.getElementById('youtube-player');
         
         // FIXED: Simple click handler without debug overhead
         fullscreenBtn.onclick = function() {
@@ -207,7 +219,7 @@
                 imagePlayer.classList.add('hidden');
                 videoPlayer.classList.remove('hidden');
                 videoPlayer.src = item.url;
-                videoPlayer.muted = false; // Unmute after user interaction
+                videoPlayer.muted = false; // keep unmuted
                 videoPlayer.play().catch(err => {
                     console.error('Play error:', err);
                     isPlaying = false;
@@ -226,20 +238,42 @@
             } else if (item.type === 'youtube') {
                 videoPlayer.classList.add('hidden');
                 imagePlayer.classList.add('hidden');
-                youtubePlayer.classList.remove('hidden');
+                youtubeContainer.classList.remove('hidden');
 
-                // Convert URL to embeddable format and add autoplay parameter
+                // Convert URL to embeddable format
                 const embedUrl = convertToEmbed(item.url);
-                youtubePlayer.src = embedUrl + (embedUrl.includes('?') ? '&' : '?') + 'autoplay=1&mute=0&rel=0';
+                const videoId = embedUrl.split('/embed/')[1];
+                if (youtubeEndTimer) {
+                    clearTimeout(youtubeEndTimer);
+                    youtubeEndTimer = null;
+                }
+                pendingYoutubeDurationSec = null;
+                youtubeStartTs = Date.now();
+                youtubeMaxMs = null;
 
-                // Use estimated duration (5 minutes default) or YouTube API for exact duration
-                const estimatedDuration = 300000; // 5 minutes in milliseconds
-                setTimeout(() => {
-                    youtubePlayer.classList.add('hidden');
-                    youtubePlayer.src = '';
+                pendingYoutubeId = videoId;
+
+                if (youtubePlayerReady && youtubePlayer) {
+                    youtubePlayer.mute(); // ensure autoplay allowed
+                    youtubePlayer.loadVideoById(videoId);
+                    youtubePlayer.playVideo();
+                    youtubePlayer.setVolume(100);
+                    // Try to schedule a duration-based fallback after player reports duration
+                    scheduleYoutubeTimeout();
+                } else {
+                    // Fallback: direct iframe load (muted to satisfy autoplay), will stay muted until API kicks in
+                    youtubeIframe.src = embedUrl + (embedUrl.includes('?') ? '&' : '?') + 'autoplay=1&mute=1&rel=0&enablejsapi=1&origin=' + encodeURIComponent(window.location.origin);
+                }
+
+                // Fallback timeout: move on after 10 minutes if API end event fails
+                youtubeEndTimer = setTimeout(() => {
+                    console.warn('YouTube fallback timeout reached; advancing');
+                    youtubeContainer.classList.add('hidden');
+                    youtubeIframe.src = '';
+                    if (youtubePlayer && youtubePlayer.stopVideo) youtubePlayer.stopVideo();
                     isPlaying = false;
                     nextItem();
-                }, estimatedDuration);
+                }, 10 * 60 * 1000);
             }
         }
         
@@ -265,7 +299,26 @@
         function nextItem() {
             currentIndex = (currentIndex + 1) % playlist.length;
             isPlaying = false;
+            youtubeStartTs = null;
+            youtubeMaxMs = null;
             playNext();
+        }
+
+        function scheduleYoutubeTimeout() {
+            if (!youtubePlayer) return;
+            let dur = 0;
+            try {
+                dur = youtubePlayer.getDuration();
+            } catch (e) {
+                dur = 0;
+            }
+            if (!dur || !isFinite(dur) || dur <= 0) {
+                // unknown duration, keep existing fallback
+                return;
+            }
+            pendingYoutubeDurationSec = dur;
+            const bufferMs = 7000; // 7s buffer after expected end
+            youtubeMaxMs = (dur * 1000) + bufferMs;
         }
         
         // Video ended - play next
@@ -288,6 +341,109 @@
             nextItem();
         };
         
+        // YouTube IFrame API callback when script loads
+        function onYouTubeIframeAPIReady() {
+            console.log('YouTube IFrame API ready');
+            youtubePlayer = new YT.Player('youtube-player', {
+                height: '100%',
+                width: '100%',
+                events: {
+                    'onReady': onYouTubePlayerReady,
+                    'onStateChange': onYouTubeStateChange,
+                    'onError': onYouTubeError
+                }
+            });
+        }
+        
+        function onYouTubePlayerReady(event) {
+            console.log('YouTube player ready');
+            youtubePlayerReady = true;
+            if (pendingYoutubeId) {
+                youtubePlayer.mute();
+                youtubePlayer.loadVideoById(pendingYoutubeId);
+                youtubePlayer.playVideo();
+                youtubePlayer.setVolume(100);
+                scheduleYoutubeTimeout();
+            }
+        }
+        
+        function onYouTubeStateChange(event) {
+            // State 0 = ended, 1 = playing, 2 = paused, etc.
+            if (event.data === YT.PlayerState.ENDED) {
+                console.log('YouTube video ended');
+                youtubeContainer.classList.add('hidden');
+                if (youtubePlayer && youtubePlayer.stopVideo) youtubePlayer.stopVideo();
+                if (youtubeEndTimer) { clearTimeout(youtubeEndTimer); youtubeEndTimer = null; }
+                youtubeStartTs = null;
+                youtubeMaxMs = null;
+                pendingYoutubeId = null;
+                pendingYoutubeDurationSec = null;
+                isPlaying = false;
+                nextItem();
+            } else if (event.data === YT.PlayerState.PLAYING) {
+                console.log('YouTube video playing');
+                // Ensure unmuted when playing
+                try { youtubePlayer.unMute(); youtubePlayer.setVolume(100); } catch (e) {}
+                if (youtubeEndTimer) { clearTimeout(youtubeEndTimer); youtubeEndTimer = null; }
+                youtubeStartTs = Date.now();
+                scheduleYoutubeTimeout();
+            } else if (event.data === YT.PlayerState.UNSTARTED) {
+                // Fallback: if video doesn't auto-start, play it manually
+                if (isPlaying) {
+                    try { youtubePlayer.mute(); youtubePlayer.playVideo(); youtubePlayer.setVolume(100); } catch (e) {}
+                }
+            }
+        }
+        
+        function onYouTubeError(event) {
+            console.error('YouTube error:', event.data);
+            youtubeContainer.classList.add('hidden');
+            isPlaying = false;
+            nextItem();
+        }
+        
+        function youtubeAdvance() {
+            youtubeContainer.classList.add('hidden');
+            youtubeIframe.src = '';
+            try { if (youtubePlayer && youtubePlayer.stopVideo) youtubePlayer.stopVideo(); } catch (e) {}
+            if (youtubeEndTimer) { clearTimeout(youtubeEndTimer); youtubeEndTimer = null; }
+            youtubeStartTs = null;
+            youtubeMaxMs = null;
+            pendingYoutubeId = null;
+            pendingYoutubeDurationSec = null;
+            isPlaying = false;
+            nextItem();
+        }
+
+        function youtubeWatchdog(){
+            if (!youtubeStartTs) return;
+            const now = Date.now();
+            const elapsed = now - youtubeStartTs;
+            const maxMs = youtubeMaxMs || (5 * 60 * 1000); // default 5 min
+            // If YouTube has been running longer than expected, advance
+            if (elapsed > maxMs) {
+                console.warn('YouTube watchdog timeout; advancing');
+                youtubeAdvance();
+                return;
+            }
+            // If stuck unstarted/paused/buffering too long after start, try to resume or skip
+            if (youtubePlayer) {
+                let state = null;
+                try { state = youtubePlayer.getPlayerState(); } catch (e) { state = null; }
+                if (state !== null) {
+                    // If not playing and more than 20s since start, try play; after 35s, skip
+                    if (state !== YT.PlayerState.PLAYING) {
+                        if (elapsed > 20000 && elapsed < 35000) {
+                            try { youtubePlayer.mute(); youtubePlayer.playVideo(); youtubePlayer.setVolume(100); } catch (e) {}
+                        } else if (elapsed >= 35000) {
+                            console.warn('YouTube stalled; advancing');
+                            youtubeAdvance();
+                        }
+                    }
+                }
+            }
+        }
+
         // Prevent context menu
         document.oncontextmenu = () => false;
         
@@ -346,6 +502,8 @@
 
             // Poll every 2s
             setInterval(pollCommands, 2000);
+            // YouTube watchdog every 5s
+            setInterval(youtubeWatchdog, 5000);
     </script>
 </body>
 </html>
