@@ -136,6 +136,24 @@
             font-size: 2em;
             text-align: center;
         }
+
+        /* Switch playlist button */
+        #switch-playlist-btn {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            z-index: 1000;
+            padding: 12px 16px;
+            border: none;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.12);
+            color: #fff;
+            font-weight: 800;
+            cursor: pointer;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.25);
+            backdrop-filter: blur(6px);
+        }
+        #switch-playlist-btn:hover { background: rgba(255,255,255,0.18); }
     </style>
 </head>
 <body>
@@ -157,6 +175,12 @@
         </div>
     </div>
 
+    <button id="switch-playlist-btn" class="hidden">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+        </svg>
+    </button>
+
     <script src="https://www.youtube.com/iframe_api"></script>
 
     <script>
@@ -174,11 +198,11 @@
         
         // Check for URL parameter ?playlist_id=xxx
         const urlParams = new URLSearchParams(window.location.search);
-        const urlPlaylistId = urlParams.get('playlist_id');
+        let activeUrlPlaylistId = urlParams.get('playlist_id');
         
-        if (urlPlaylistId) {
-            console.log('Deep-link playlist from URL:', urlPlaylistId);
-            selectedPlaylistId = urlPlaylistId;
+        if (activeUrlPlaylistId) {
+            console.log('Deep-link playlist from URL:', activeUrlPlaylistId);
+            selectedPlaylistId = activeUrlPlaylistId;
             selectedSource = 'url';
         } else {
             // Try localStorage
@@ -252,7 +276,7 @@
             selectedPlaylistId = playlistId;
             
             // Persist to localStorage (unless it's a URL override)
-            if (!urlPlaylistId) {
+            if (!activeUrlPlaylistId) {
                 try {
                     localStorage.setItem(STORAGE_KEY, playlistId);
                     console.log('Saved to localStorage');
@@ -264,6 +288,31 @@
             renderPlaylistCards();
             startPlayback();
         }
+
+        function resetSelection(clearUrl = true) {
+            console.log('Resetting selection to show chooser');
+            stopPlayer();
+            document.body.classList.remove('playing');
+            playerContainer.classList.add('hidden');
+            playlistSelection.classList.remove('hidden');
+            switchBtn.classList.add('hidden');
+            selectedPlaylistId = null;
+            selectedSource = null;
+            playlist = [];
+            currentIndex = 0;
+            playlistHash = null;
+            try {
+                localStorage.removeItem(STORAGE_KEY);
+            } catch (e) {}
+            if (clearUrl && activeUrlPlaylistId) {
+                // remove playlist_id from URL so reload won't reapply deep link
+                const url = new URL(window.location.href);
+                url.searchParams.delete('playlist_id');
+                window.history.replaceState({}, '', url.toString());
+                activeUrlPlaylistId = null;
+            }
+            loadPlaylists();
+        }
         
         function startPlayback() {
             console.log('Starting playback for playlist:', selectedPlaylistId);
@@ -272,6 +321,7 @@
             playlistSelection.classList.add('hidden');
             playerContainer.classList.remove('hidden');
             document.body.classList.add('playing');
+            switchBtn.classList.remove('hidden');
             
             // Try fullscreen
             try {
@@ -314,6 +364,10 @@
         const loading = document.getElementById('loading');
         const youtubeContainer = document.getElementById('youtube-container');
         const youtubeIframe = document.getElementById('youtube-player');
+        const switchBtn = document.getElementById('switch-playlist-btn');
+        if (switchBtn) {
+            switchBtn.addEventListener('click', () => resetSelection(true));
+        }
         
         function startPlayer() {
             console.log('Starting player with playlist:', selectedPlaylistId);
