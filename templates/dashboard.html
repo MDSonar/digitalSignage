@@ -392,9 +392,25 @@
         </div>
 
         <div class="content" role="main">
+                <!-- Playlists manager (multi-playlist) -->
+                <div class="card" aria-labelledby="playlistsHeading" style="margin-bottom:12px">
+                    <div class="section-header"><h2 id="playlistsHeading">📂 Playlists</h2></div>
+                    <div class="muted" style="margin-bottom:8px">Create, select active, or delete playlists. Active playlist is used by Web Player.</div>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                        <select id="playlistSelector" style="padding:8px;border-radius:8px;border:1px solid rgba(15,23,42,0.08)"></select>
+                        <button id="selectActiveBtn" class="save-mode-btn" style="background:linear-gradient(90deg,#10b981,#34d399)">Set Active</button>
+                        <input id="newPlaylistName" placeholder="New playlist name" style="padding:8px;border-radius:8px;border:1px solid rgba(15,23,42,0.08)" />
+                        <button id="createPlaylistBtn" class="save-mode-btn">Create</button>
+                        <button id="duplicatePlaylistBtn" class="save-mode-btn" style="background:linear-gradient(90deg,#64748b,#334155)">Duplicate</button>
+                        <button id="renamePlaylistBtn" class="save-mode-btn" style="background:linear-gradient(90deg,#f59e0b,#f97316)">Rename</button>
+                        <button id="deletePlaylistBtn" class="delete-btn" style="padding:8px 12px">Delete</button>
+                        <div id="activePlaylistBadge" class="file-badge" style="margin-left:auto"></div>
+                    </div>
+                </div>
+
                 <!-- Playlist panel -->
                 <div class="card" aria-labelledby="playlistHeading" style="margin-bottom:12px">
-                    <div class="section-header"><h2 id="playlistHeading">🎵 Playlist (Ordered)</h2></div>
+                    <div class="section-header"><h2 id="playlistHeading">🎵 Playlist (Ordered) <span id="activeNameTag" class="file-badge" style="margin-left:8px"></span></h2></div>
                     <div style="margin-bottom:8px;color:var(--muted);font-size:0.92rem">Drag to reorder. Set "Repeat" to play an item consecutively.</div>
                     <div id="playlistPanel">
                         <ul id="playlistList" style="list-style:none;display:flex;flex-direction:column;gap:8px;padding:0;margin:0">
@@ -416,7 +432,7 @@
                     <div class="section-header"><h2 id="videosHeading">📹 Videos</h2></div>
 
                     <div class="upload-form" style="display:flex;flex-direction:column;gap:10px">
-                        <form action="{{ url_for('upload_file', content_type='video') }}" method="POST" enctype="multipart/form-data" class="uploadForm" aria-label="Upload video form">
+                        <form action="{{ url_for('upload_chunk', content_type='video') }}" method="POST" enctype="multipart/form-data" class="uploadForm" aria-label="Upload video form">
                             <!-- Drop area styled label -->
                             <label class="drop-area" for="videoFile" tabindex="0" aria-label="Upload a video">
                                 <div class="drop-default">
@@ -475,7 +491,7 @@
                     <div class="section-header"><h2 id="presentationsHeading">📊 Presentations</h2></div>
 
                     <div class="upload-form" style="display:flex;flex-direction:column;gap:10px">
-                        <form action="{{ url_for('upload_file', content_type='presentation') }}" method="POST" enctype="multipart/form-data" class="uploadForm" aria-label="Upload presentation form">
+                        <form action="{{ url_for('upload_chunk', content_type='presentation') }}" method="POST" enctype="multipart/form-data" class="uploadForm" aria-label="Upload presentation form">
                             <label class="drop-area" for="presentationFile" tabindex="0" aria-label="Upload a presentation">
                                 <div class="drop-default">
                                     <strong>Drag & drop or click to browse</strong>
@@ -1034,7 +1050,163 @@ function renderPlaylistPanel(items){
 }
 
 // Initial load and refresh on page show
-document.addEventListener('DOMContentLoaded', ()=>{ fetchPlaylistOrder().catch(()=>{}); });
+document.addEventListener('DOMContentLoaded', ()=>{ 
+    // Load playlists manager
+    (async function(){
+        try{
+            const res = await fetch('/api/playlists');
+            const j = await res.json();
+            const sel = document.getElementById('playlistSelector');
+            const badge = document.getElementById('activePlaylistBadge');
+            const tag = document.getElementById('activeNameTag');
+            if(sel){
+                sel.innerHTML = '';
+                (j.playlists||[]).forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.name; opt.textContent = p.name;
+                    sel.appendChild(opt);
+                });
+                const activeId = j.active_playlist_id;
+                const activeName = (j.playlists||[]).find(p=>p.id===activeId)?.name;
+                if(activeName) sel.value = activeName;
+            }
+            if(badge){
+                const activeId = j.active_playlist_id;
+                const activeName = (j.playlists||[]).find(p=>p.id===activeId)?.name;
+                badge.textContent = activeName ? ('Active: '+activeName) : 'Active: (legacy)';
+                if(tag){ tag.textContent = activeName ? activeName : 'legacy'; }
+            }
+        }catch(e){ console.warn('Failed to load playlists', e); }
+    })();
+
+    // Wire actions
+    const selectBtn = document.getElementById('selectActiveBtn');
+    if(selectBtn){
+        selectBtn.onclick = async function(){
+            const sel = document.getElementById('playlistSelector');
+            const name = sel && sel.value;
+            if(!name) return alert('Select a playlist');
+            const listRes = await fetch('/api/playlists');
+            const list = await listRes.json();
+            const target = (list.playlists||[]).find(p=>p.name===name);
+            if(!target) return alert('Playlist not found');
+            const res = await fetch('/api/playlists/set_active', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({playlist_id: target.id})});
+            const j = await res.json();
+            if(!j.active_playlist_id) return alert(j.error||'Failed to set active');
+            alert('Active playlist set to '+name);
+            location.reload();
+        };
+    }
+
+    const createBtn = document.getElementById('createPlaylistBtn');
+    if(createBtn){
+        createBtn.onclick = async function(){
+            const inp = document.getElementById('newPlaylistName');
+            const name = inp && inp.value && inp.value.trim();
+            if(!name) return alert('Enter a playlist name');
+            const fd = new FormData(); fd.append('name', name);
+            const res = await fetch('/api/playlists', {method:'POST', body: fd});
+            const j = await res.json();
+            if(!j.id) return alert(j.error||'Failed to create');
+            alert('Created playlist '+name);
+            // reload selector
+            const res2 = await fetch('/api/playlists');
+            const j2 = await res2.json();
+            const sel = document.getElementById('playlistSelector');
+            if(sel){
+                sel.innerHTML='';
+                (j2.playlists||[]).forEach(n=>{ const o=document.createElement('option'); o.value=n.name; o.textContent=n.name; sel.appendChild(o); });
+                sel.value = name;
+            }
+        };
+    }
+
+    const deleteBtn = document.getElementById('deletePlaylistBtn');
+    if(deleteBtn){
+        deleteBtn.onclick = async function(){
+            const sel = document.getElementById('playlistSelector');
+            const name = sel && sel.value;
+            if(!name) return alert('Select a playlist to delete');
+            if(!confirm('Delete playlist '+name+'?')) return;
+            // fetch id by listing
+            const listRes = await fetch('/api/playlists');
+            const list = await listRes.json();
+            const target = (list.playlists||[]).find(p=>p.name===name);
+            if(!target) return alert('Playlist not found');
+            const res = await fetch('/api/playlists/'+encodeURIComponent(target.id), {method:'DELETE'});
+            const j = await res.json();
+            if(!j.ok) return alert(j.error||'Failed to delete');
+            alert('Deleted playlist '+name);
+            // reload selector
+            const res2 = await fetch('/api/playlists');
+            const j2 = await res2.json();
+            if(sel){
+                sel.innerHTML='';
+                (j2.playlists||[]).forEach(n=>{ const o=document.createElement('option'); o.value=n.name; o.textContent=n.name; sel.appendChild(o); });
+            }
+            const badge = document.getElementById('activePlaylistBadge');
+            const active = j2.active_playlist_id;
+            const activeName = (j2.playlists||[]).find(p=>p.id===active)?.name;
+            if(badge) badge.textContent = activeName ? ('Active: '+activeName) : 'Active: (legacy)';
+            fetchPlaylistOrder().catch(()=>{});
+        };
+    }
+
+    const dupBtn = document.getElementById('duplicatePlaylistBtn');
+    if(dupBtn){
+        dupBtn.onclick = async function(){
+            const sel = document.getElementById('playlistSelector');
+            const name = sel && sel.value;
+            if(!name) return alert('Select a playlist to duplicate');
+            const listRes = await fetch('/api/playlists');
+            const list = await listRes.json();
+            const target = (list.playlists||[]).find(p=>p.name===name);
+            if(!target) return alert('Playlist not found');
+            const res = await fetch('/api/playlists/'+encodeURIComponent(target.id)+'/duplicate', {method:'POST'});
+            const j = await res.json();
+            if(!j.id) return alert(j.error||'Duplicate failed');
+            alert('Duplicated playlist to '+(j.playlist?.name||'copy'));
+            const res2 = await fetch('/api/playlists');
+            const j2 = await res2.json();
+            if(sel){
+                sel.innerHTML='';
+                (j2.playlists||[]).forEach(n=>{ const o=document.createElement('option'); o.value=n.name; o.textContent=n.name; sel.appendChild(o); });
+            }
+        };
+    }
+
+    const renameBtn = document.getElementById('renamePlaylistBtn');
+    if(renameBtn){
+        renameBtn.onclick = async function(){
+            const sel = document.getElementById('playlistSelector');
+            const name = sel && sel.value;
+            if(!name) return alert('Select a playlist to rename');
+            const newName = prompt('Enter new name', name);
+            if(!newName || newName===name) return;
+            const listRes = await fetch('/api/playlists');
+            const list = await listRes.json();
+            const target = (list.playlists||[]).find(p=>p.name===name);
+            if(!target) return alert('Playlist not found');
+            const res = await fetch('/api/playlists/'+encodeURIComponent(target.id), {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name: newName})});
+            const j = await res.json();
+            if(!j.playlist) return alert(j.error||'Rename failed');
+            alert('Renamed to '+newName);
+            const res2 = await fetch('/api/playlists');
+            const j2 = await res2.json();
+            if(sel){
+                sel.innerHTML='';
+                (j2.playlists||[]).forEach(n=>{ const o=document.createElement('option'); o.value=n.name; o.textContent=n.name; sel.appendChild(o); });
+                sel.value = newName;
+            }
+            const badge = document.getElementById('activePlaylistBadge');
+            const active = j2.active_playlist_id;
+            const activeName = (j2.playlists||[]).find(p=>p.id===active)?.name;
+            if(badge) badge.textContent = activeName ? ('Active: '+activeName) : 'Active: (legacy)';
+        };
+    }
+
+    fetchPlaylistOrder().catch(()=>{});
+});
 window.addEventListener('pageshow', ()=>{ fetchPlaylistOrder().catch(()=>{}); });
 
 // Auto-refresh playlist every 5 seconds to catch uploads

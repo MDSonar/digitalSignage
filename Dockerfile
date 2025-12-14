@@ -32,6 +32,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application files
 COPY dashboard.py .
 COPY web_player.py .
+COPY utils.py .
 COPY templates/ ./templates/
 
 # Create necessary directories with proper permissions

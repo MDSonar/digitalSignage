@@ -20,6 +20,11 @@ import json
 from pathlib import PurePath
 import platform
 import hashlib
+from utils import (
+    read_playlists, write_playlists, ensure_playlist_store, get_playlist_by_id,
+    create_playlist, update_playlist, delete_playlist, duplicate_playlist,
+    set_active_playlist, get_active_playlist_id, reorder_playlists
+)
 
 # Optional: psutil for system stats (graceful degradation if not installed)
 try:
@@ -47,6 +52,8 @@ YOUTUBE_LINKS_FILE = Path.home() / 'signage' / 'youtube_links.json'
 CACHE_DIR = Path.home() / 'signage' / 'cache' / 'slides'  # NEW: Cache directory
 CONFIG_FILE = Path.home() / 'signage' / 'config.json'
 PLAYLIST_FILE = Path.home() / 'signage' / 'playlist.json'
+PLAYLISTS_DIR = Path.home() / 'signage' / 'playlists'
+PLAYLISTS_DIR.mkdir(parents=True, exist_ok=True)
 WEB_PLAYER_PID = Path.home() / 'signage' / 'web_player.pid'
 SIGNAGE_PLAYER_PID = Path.home() / 'signage' / 'signage_player.pid'
 COMMANDS_DIR = Path.home() / 'signage' / 'commands'
@@ -129,6 +136,110 @@ def write_playlist(lst):
     except Exception:
         logger.exception('Failed to write playlist')
         return False
+
+# --- Multi-playlist helpers (backward compatible) ---
+def list_playlists():
+    """Return list of playlist names available in PLAYLISTS_DIR."""
+    out = []
+    try:
+        for p in sorted(PLAYLISTS_DIR.glob('*.json')):
+            out.append(p.stem)
+    except Exception:
+        logger.exception('Failed to list playlists')
+    return out
+
+def read_playlist_by_name(name: str):
+    """Read a named playlist (stored as JSON list) from PLAYLISTS_DIR."""
+    try:
+        path = PLAYLISTS_DIR / f"{Path(name).stem}.json"
+        if path.exists():
+            return json.loads(path.read_text())
+    except Exception:
+        logger.exception('Failed to read named playlist')
+    return []
+
+def write_playlist_by_name(name: str, lst):
+    try:
+        path = PLAYLISTS_DIR / f"{Path(name).stem}.json"
+        path.write_text(json.dumps(lst))
+        return True
+    except Exception:
+        logger.exception('Failed to write named playlist')
+        return False
+
+def get_active_playlist_name():
+    cfg = read_config()
+    return cfg.get('activePlaylist')
+
+def set_active_playlist_name(name: str):
+    cfg = read_config()
+    if name:
+        cfg['activePlaylist'] = Path(name).stem
+    else:
+        cfg.pop('activePlaylist', None)
+    return write_config(cfg)
+
+@app.route('/playlists', methods=['GET'])
+@login_required
+def playlists_index():
+    return jsonify({
+        'active': get_active_playlist_name(),
+        'items': list_playlists()
+    })
+
+@app.route('/playlists/create', methods=['POST'])
+@login_required
+def playlists_create():
+    name = request.form.get('name')
+    if not name:
+        return jsonify({'ok': False, 'error': 'name required'}), 400
+    if name in list_playlists():
+        return jsonify({'ok': False, 'error': 'playlist exists'}), 409
+    ok = write_playlist_by_name(name, [])
+    return jsonify({'ok': ok, 'name': name})
+
+@app.route('/playlists/select', methods=['POST'])
+@login_required
+def playlists_select():
+    name = request.form.get('name')
+    if not name or name not in list_playlists():
+        return jsonify({'ok': False, 'error': 'unknown playlist'}), 404
+    ok = set_active_playlist_name(name)
+    return jsonify({'ok': ok, 'active': name})
+
+@app.route('/playlists/delete', methods=['POST'])
+@login_required
+def playlists_delete():
+    name = request.form.get('name')
+    if not name:
+        return jsonify({'ok': False, 'error': 'name required'}), 400
+    try:
+        path = PLAYLISTS_DIR / f"{Path(name).stem}.json"
+        if path.exists():
+            path.unlink()
+        # clear active if deleting active
+        if get_active_playlist_name() == Path(name).stem:
+            set_active_playlist_name(None)
+        return jsonify({'ok': True})
+    except Exception:
+        logger.exception('Failed to delete playlist')
+        return jsonify({'ok': False}), 500
+
+@app.route('/playlists/update', methods=['POST'])
+@login_required
+def playlists_update():
+    """Update items of a named playlist. Expects JSON body with {'name': str, 'items': list}"""
+    try:
+        payload = request.get_json(force=True)
+        name = payload.get('name')
+        items = payload.get('items')
+        if not isinstance(items, list) or not name:
+            return jsonify({'ok': False, 'error': 'invalid payload'}), 400
+        ok = write_playlist_by_name(name, items)
+        return jsonify({'ok': ok})
+    except Exception:
+        logger.exception('Failed to update playlist')
+        return jsonify({'ok': False}), 500
 
 def read_youtube_links():
     try:
@@ -523,7 +634,13 @@ def dashboard():
     presentations = []
     youtube_links = []
     yt_data = read_youtube_links()
-    playlist = read_playlist()
+    ensure_playlist_store()
+    active_id = get_active_playlist_id()
+    if active_id:
+        pl = get_playlist_by_id(active_id)
+        playlist = pl.get('items', []) if pl else []
+    else:
+        playlist = read_playlist()
     playlist_set = playlist_names_set(playlist)
     
     try:
@@ -593,7 +710,13 @@ def toggle_playlist(content_type, filename):
         return jsonify({'ok': False, 'error': 'invalid content type'}), 400
 
     try:
-        raw = read_playlist()
+        # Use active playlist from playlists.json; fallback to legacy
+        active_id = get_active_playlist_id()
+        if active_id:
+            pl = get_playlist_by_id(active_id)
+            raw = pl.get('items', []) if pl else []
+        else:
+            raw = read_playlist()
         items = normalize_playlist_to_objects(raw)
         logger.info(f"Current playlist items: {len(items)}")
 
@@ -628,7 +751,10 @@ def toggle_playlist(content_type, filename):
                 })
                 in_playlist = True
 
-            ok = write_playlist(items)
+            if active_id:
+                ok, _ = update_playlist(active_id, items=items)
+            else:
+                ok = write_playlist(items)
             if not ok:
                 logger.error("Failed to write playlist to file")
                 return jsonify({'ok': False, 'error': 'failed to save playlist'}), 500
@@ -653,7 +779,10 @@ def toggle_playlist(content_type, filename):
             items.append({'name': filename, 'type': content_type, 'repeats': 1})
             in_playlist = True
 
-        ok = write_playlist(items)
+        if active_id:
+            ok, _ = update_playlist(active_id, items=items)
+        else:
+            ok = write_playlist(items)
         if ok:
             logger.info(f"Toggle success for {filename} - in_playlist: {in_playlist}")
             return jsonify({'ok': True, 'in_playlist': in_playlist, 'filename': filename})
@@ -669,7 +798,13 @@ def toggle_playlist(content_type, filename):
 def api_playlist_order_get():
     """Return normalized playlist (ordered) as list of objects {name, repeats}."""
     try:
-        raw = read_playlist()
+        # Use active playlist id if configured; otherwise legacy single file
+        active_id = get_active_playlist_id()
+        if active_id:
+            pl = get_playlist_by_id(active_id)
+            raw = pl.get('items', []) if pl else []
+        else:
+            raw = read_playlist()
         items = normalize_playlist_to_objects(raw)
         return jsonify({'ok': True, 'playlist': items})
     except Exception:
@@ -681,7 +816,8 @@ def api_playlist_order_get():
 @app.route('/api/playlist', methods=['GET'])
 def api_playlist():
     try:
-        raw = read_playlist()
+        active = get_active_playlist_name()
+        raw = read_playlist_by_name(active) if active else read_playlist()
         playlist = normalize_playlist_to_objects(raw)
         playlist_hash = hashlib.md5(json.dumps(playlist, sort_keys=True).encode()).hexdigest()
         return jsonify({'playlist': playlist, 'hash': playlist_hash, 'count': len(playlist)})
@@ -732,7 +868,12 @@ def api_playlist_order_post():
 
                 normalized.append(item)
 
-        ok = write_playlist(normalized)
+        # Save to active playlist id if configured; otherwise legacy single file
+        active_id = get_active_playlist_id()
+        if active_id:
+            ok, _ = update_playlist(active_id, items=normalized)
+        else:
+            ok = write_playlist(normalized)
         if ok:
             return jsonify({'ok': True, 'playlist': normalized})
         else:
@@ -776,71 +917,98 @@ def stop_signage_player():
     flash('HDMI player (player.py) is not deployed in this setup.', 'info')
     return redirect(url_for('dashboard'))
 
-@app.route('/upload/<content_type>', methods=['POST'])
+@app.route('/api/playlists', methods=['GET'])
 @login_required
-def upload_file(content_type):
-    start_time = time.time()
-    
-    try:
-        logger.info(f"Upload started for {content_type}")
-        
-        if 'file' not in request.files:
-            flash('No file selected', 'error')
-            return redirect(url_for('dashboard'))
-        
-        file = request.files['file']
-        
-        if file.filename == '':
-            flash('No file selected', 'error')
-            return redirect(url_for('dashboard'))
-        
-        if content_type == 'video':
-            target_dir = VIDEOS_DIR
-            allowed_ext = ALLOWED_VIDEO_EXTENSIONS
-        elif content_type == 'presentation':
-            target_dir = PRESENTATIONS_DIR
-            allowed_ext = ALLOWED_PPT_EXTENSIONS
-        else:
-            flash('Invalid content type', 'error')
-            return redirect(url_for('dashboard'))
-        
-        file_ext = Path(file.filename).suffix.lower()
-        if file_ext not in allowed_ext:
-            flash(f'Invalid file type. Allowed: {", ".join(allowed_ext)}', 'error')
-            return redirect(url_for('dashboard'))
-        
-        filename = secure_filename(file.filename)
-        filepath = target_dir / filename
-        
-        # NEW: If presentation exists, delete old cache first
-        if content_type == 'presentation' and filepath.exists():
-            cache_path = CACHE_DIR / filepath.stem
-            if cache_path.exists():
-                shutil.rmtree(cache_path)
-                logger.info(f"Deleted old cache for: {filename}")
-        
-        target_dir.mkdir(parents=True, exist_ok=True)
-        
-        logger.info(f"Saving {filename}...")
-        file.save(str(filepath))
-        
-        if filepath.exists():
-            elapsed = time.time() - start_time
-            file_size = get_file_size(filepath)
-            flash(f'✓ Uploaded: {filename} ({file_size}) in {elapsed:.1f}s', 'success')
-            logger.info(f"Upload complete: {filename} ({file_size}) in {elapsed:.1f}s")
-            # Note: Presentation conversion to slides is not performed in this setup
-            # Web player uses native video playback instead of slide conversion
-        else:
-            flash('Upload failed: File not saved', 'error')
-            logger.error(f"File not found after save: {filepath}")
-        
-    except Exception as e:
-        elapsed = time.time() - start_time
-        flash(f'Upload failed after {elapsed:.1f}s: {str(e)}', 'error')
-        logger.error(f"Upload error after {elapsed:.1f}s: {e}", exc_info=True)
-    
-    return redirect(url_for('dashboard'))
+def api_playlists_list():
+    store = read_playlists()
+    items = []
+    for pl in store.get('playlists', []):
+        items.append({
+            'id': pl.get('id'),
+            'name': pl.get('name'),
+            'itemCount': len(pl.get('items', [])),
+            'created_at': pl.get('created_at'),
+            'updated_at': pl.get('updated_at')
+        })
+    return jsonify({'playlists': items, 'active_playlist_id': store.get('active_playlist_id')})
+
+@app.route('/api/playlists', methods=['POST'])
+@login_required
+def api_playlists_create():
+    name = request.form.get('name') or (request.json and request.json.get('name'))
+    if not name:
+        return jsonify({'ok': False, 'error': 'name required'}), 400
+    ok, pl = create_playlist(name)
+    if not ok:
+        return jsonify({'ok': False, 'error': 'create failed'}), 500
+    return jsonify({'id': pl['id'], 'playlist': pl}), 201
+
+@app.route('/api/playlists/<pid>', methods=['GET'])
+@login_required
+def api_playlists_get(pid):
+    pl = get_playlist_by_id(pid)
+    if not pl:
+        return jsonify({'ok': False, 'error': 'not found'}), 404
+    phash = hashlib.md5(json.dumps(pl.get('items', []), sort_keys=True).encode()).hexdigest()
+    return jsonify({'playlist': pl, 'hash': phash})
+
+@app.route('/api/playlists/<pid>', methods=['PUT'])
+@login_required
+def api_playlists_put(pid):
+    payload = request.get_json(force=True)
+    name = payload.get('name')
+    items = payload.get('items')
+    ok, pl = update_playlist(pid, name=name, items=items)
+    if not ok or not pl:
+        return jsonify({'ok': False, 'error': 'update failed'}), 500
+    return jsonify({'playlist': pl})
+
+@app.route('/api/playlists/<pid>', methods=['DELETE'])
+@login_required
+def api_playlists_delete(pid):
+    ok = delete_playlist(pid)
+    return jsonify({'ok': ok})
+
+@app.route('/api/playlists/<pid>/reorder', methods=['POST'])
+@login_required
+def api_playlists_reorder(pid):
+    payload = request.get_json(force=True)
+    items = payload.get('items')
+    if not isinstance(items, list):
+        return jsonify({'ok': False, 'error': 'items required'}), 400
+    ok, pl = update_playlist(pid, items=items)
+    if not ok:
+        return jsonify({'ok': False, 'error': 'reorder failed'}), 500
+    return jsonify({'playlist': pl})
+
+@app.route('/api/playlists/<pid>/duplicate', methods=['POST'])
+@login_required
+def api_playlists_duplicate(pid):
+    ok, pl = duplicate_playlist(pid)
+    if not ok or not pl:
+        return jsonify({'ok': False, 'error': 'duplicate failed'}), 500
+    return jsonify({'id': pl['id'], 'playlist': pl}), 201
+
+@app.route('/api/playlists/set_active', methods=['POST'])
+@login_required
+def api_playlists_set_active():
+    pid = request.form.get('playlist_id') or (request.json and request.json.get('playlist_id'))
+    if not pid:
+        return jsonify({'ok': False, 'error': 'playlist_id required'}), 400
+    ok = set_active_playlist(pid)
+    if not ok:
+        return jsonify({'ok': False, 'error': 'set active failed'}), 400
+    return jsonify({'active_playlist_id': pid})
+
+@app.route('/api/playlists/reorder', methods=['POST'])
+@login_required
+def api_playlists_reorder_list():
+    payload = request.get_json(force=True)
+    order = payload.get('order')
+    if not isinstance(order, list):
+        return jsonify({'ok': False, 'error': 'order array required'}), 400
+    ok = reorder_playlists(order)
+    return jsonify({'ok': ok})
 
 @app.route('/delete/<content_type>/<filename>', methods=['POST'])
 @login_required

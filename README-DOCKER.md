@@ -116,6 +116,14 @@ Data is stored in Docker volumes:
 - `signage-cache` - Converted presentation slides
 - `signage-logs` - Application logs
 - `signage-data` - Configuration and playlists
+### Playlists Store (New)
+
+- Canonical store: `~/signage/playlists.json` inside the container.
+- Legacy single playlist file `~/signage/playlist.json` is still supported. On first run, if `playlists.json` does not exist and `playlist.json` is a list, the app will create `playlists.json` with a single playlist named `default` and set it active. The legacy file is not deleted.
+- Web Player:
+  - `GET /api/playlists` returns playlist metadata and active id.
+  - `GET /api/playlist?playlist_id=<optional>` returns the requested playlist; when omitted, returns the active playlist (legacy behavior).
+- Dashboard provides CRUD endpoints under `/api/playlists/*` and UI controls for creating, selecting active, renaming, duplicating, deleting, and reordering.
 
 To backup:
 ```bash
