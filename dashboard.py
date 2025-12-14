@@ -697,12 +697,19 @@ def dashboard():
 @app.route('/control/toggle_playlist/<content_type>/<path:filename>', methods=['POST'])
 # Made public so playlist toggles don't break if session cookies expire during long dashboard use
 def toggle_playlist(content_type, filename):
-    """Toggle an item (video/presentation/youtube) in/out of the playlist"""
+    """Toggle an item (video/presentation/youtube) in/out of the playlist
+    
+    Optional query param: ?playlist_id=<id> to target specific playlist.
+    If not provided, uses active playlist for backward compatibility.
+    """
 
     # decode URL encoded filename/url (client sends encodeURIComponent(...))
     filename = unquote(filename)
     
-    logger.info(f"Toggle playlist request - type: {content_type}, filename: {filename}")
+    # Check for explicit playlist_id param
+    target_playlist_id = request.args.get('playlist_id')
+    
+    logger.info(f"Toggle playlist request - type: {content_type}, filename: {filename}, playlist_id: {target_playlist_id}")
 
     # Allow YouTube links
     if content_type not in ('video', 'presentation', 'youtube'):
@@ -710,10 +717,10 @@ def toggle_playlist(content_type, filename):
         return jsonify({'ok': False, 'error': 'invalid content type'}), 400
 
     try:
-        # Use active playlist from playlists.json; fallback to legacy
-        active_id = get_active_playlist_id()
-        if active_id:
-            pl = get_playlist_by_id(active_id)
+        # Use explicit playlist_id or fallback to active for backward compat
+        playlist_id = target_playlist_id or get_active_playlist_id()
+        if playlist_id:
+            pl = get_playlist_by_id(playlist_id)
             raw = pl.get('items', []) if pl else []
         else:
             raw = read_playlist()
@@ -751,8 +758,8 @@ def toggle_playlist(content_type, filename):
                 })
                 in_playlist = True
 
-            if active_id:
-                ok, _ = update_playlist(active_id, items=items)
+            if playlist_id:
+                ok, _ = update_playlist(playlist_id, items=items)
             else:
                 ok = write_playlist(items)
             if not ok:
@@ -779,8 +786,8 @@ def toggle_playlist(content_type, filename):
             items.append({'name': filename, 'type': content_type, 'repeats': 1})
             in_playlist = True
 
-        if active_id:
-            ok, _ = update_playlist(active_id, items=items)
+        if playlist_id:
+            ok, _ = update_playlist(playlist_id, items=items)
         else:
             ok = write_playlist(items)
         if ok:

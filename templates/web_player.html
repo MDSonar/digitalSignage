@@ -13,46 +13,98 @@
         }
         
         body {
-            background: #000;
+            background: #0f172a;
             overflow: hidden;
             font-family: Arial, sans-serif;
+            color: white;
         }
         
         body.playing {
             cursor: none;
+            background: #000;
         }
         
-        #fullscreen-prompt {
+        /* Playlist Selection Screen */
+        #playlist-selection {
             position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0,0,0,0.9);
-            color: white;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
             padding: 40px;
-            border-radius: 10px;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        }
+        
+        #playlist-selection h1 {
+            font-size: 3em;
+            margin-bottom: 20px;
             text-align: center;
-            font-size: 1.5em;
-            z-index: 1000;
-            cursor: pointer !important;
         }
         
-        #fullscreen-prompt button {
-            margin-top: 20px;
-            padding: 15px 30px;
+        #playlist-selection .subtitle {
             font-size: 1.2em;
-            background: #667eea;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer !important;
-            transition: background 0.3s;
+            opacity: 0.7;
+            margin-bottom: 40px;
+            text-align: center;
         }
         
-        #fullscreen-prompt button:hover {
-            background: #5568d3;
+        #playlist-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            width: 100%;
+            max-width: 1200px;
+            margin-bottom: 20px;
         }
         
+        .playlist-card {
+            background: rgba(255, 255, 255, 0.1);
+            border: 3px solid rgba(255, 255, 255, 0.2);
+            border-radius: 16px;
+            padding: 40px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: center;
+            min-height: 200px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        
+        .playlist-card:hover {
+            background: rgba(102, 126, 234, 0.3);
+            border-color: rgba(102, 126, 234, 0.8);
+            transform: translateY(-5px);
+        }
+        
+        .playlist-card.selected {
+            background: rgba(102, 126, 234, 0.4);
+            border-color: #667eea;
+            border-width: 4px;
+        }
+        
+        .playlist-card h2 {
+            font-size: 2em;
+            margin-bottom: 15px;
+        }
+        
+        .playlist-card .meta {
+            font-size: 1.1em;
+            opacity: 0.8;
+            margin-top: 10px;
+        }
+        
+        #deeplink-info {
+            margin-top: 20px;
+            opacity: 0.6;
+            font-size: 0.9em;
+        }
+        
+        /* Player Container */
         #player-container {
             position: fixed;
             top: 0;
@@ -62,6 +114,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            background: #000;
         }
         
         video, img, iframe#youtube-player {
@@ -86,14 +139,17 @@
     </style>
 </head>
 <body>
-    <div id="fullscreen-prompt">
-        <div>Litmus Signage Player</div>
-        <button id="fullscreen-btn">Start Player</button>
-        <div style="margin-top:15px; font-size:0.6em; opacity:0.6;">v1.3 - Optimized</div>
+    <!-- Playlist Selection Screen -->
+    <div id="playlist-selection">
+        <h1>🖥️ Litmus Signage Player</h1>
+        <div class="subtitle">Select a playlist to play on this screen</div>
+        <div id="playlist-grid"></div>
+        <div id="deeplink-info">Tip: Use ?playlist_id=&lt;id&gt; to deep-link to a specific playlist</div>
     </div>
     
-    <div id="player-container">
-        <div id="loading" class="hidden">Loading...</div>
+    <!-- Player Container -->
+    <div id="player-container" class="hidden">
+        <div id="loading">Loading...</div>
         <video id="video-player" class="hidden" autoplay playsinline></video>
         <img id="image-player" class="hidden">
         <div id="youtube-container" class="hidden">
@@ -104,8 +160,142 @@
     <script src="https://www.youtube.com/iframe_api"></script>
 
     <script>
-        console.log('Web Player v1.3 - Optimized');
+        console.log('Web Player v2.0 - Per-Client Playlist Selection');
         
+        // ===== PLAYLIST SELECTION =====
+        const STORAGE_KEY = 'signage.selected_playlist_id';
+        const playlistSelection = document.getElementById('playlist-selection');
+        const playlistGrid = document.getElementById('playlist-grid');
+        const playerContainer = document.getElementById('player-container');
+        
+        let selectedPlaylistId = null;
+        let selectedSource = null; // 'url' | 'localStorage' | 'server-active' | null
+        let availablePlaylists = [];
+        
+        // Check for URL parameter ?playlist_id=xxx
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlPlaylistId = urlParams.get('playlist_id');
+        
+        if (urlPlaylistId) {
+            console.log('Deep-link playlist from URL:', urlPlaylistId);
+            selectedPlaylistId = urlPlaylistId;
+            selectedSource = 'url';
+        } else {
+            // Try localStorage
+            try {
+                const stored = localStorage.getItem(STORAGE_KEY);
+                if (stored) {
+                    console.log('Loaded playlist from localStorage:', stored);
+                    selectedPlaylistId = stored;
+                    selectedSource = 'localStorage';
+                }
+            } catch (e) {
+                console.warn('localStorage unavailable:', e);
+            }
+        }
+        
+        // Load playlists and show selection screen
+        async function loadPlaylists() {
+            try {
+                const res = await fetch('/api/playlists');
+                if (!res.ok) throw new Error('Failed to fetch playlists');
+                
+                const data = await res.json();
+                availablePlaylists = data.playlists || [];
+                
+                // If no selection yet, preselect server active but do NOT autoplay
+                if (!selectedPlaylistId && data.active_playlist_id) {
+                    console.log('Preselecting server active playlist (no autoplay):', data.active_playlist_id);
+                    selectedPlaylistId = data.active_playlist_id;
+                    selectedSource = 'server-active';
+                }
+                
+                renderPlaylistCards();
+                
+                // Autostart only for URL deep-link or persisted localStorage; never for server fallback
+                if (selectedPlaylistId && (selectedSource === 'url' || selectedSource === 'localStorage')) {
+                    startPlayback();
+                }
+            } catch (error) {
+                console.error('Error loading playlists:', error);
+                playlistGrid.innerHTML = '<div style="color:#ef4444;font-size:1.2em">Failed to load playlists</div>';
+            }
+        }
+        
+        function renderPlaylistCards() {
+            playlistGrid.innerHTML = '';
+            
+            if (availablePlaylists.length === 0) {
+                playlistGrid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; opacity:0.7">No playlists available</div>';
+                return;
+            }
+            
+            availablePlaylists.forEach(pl => {
+                const card = document.createElement('div');
+                card.className = 'playlist-card';
+                if (pl.id === selectedPlaylistId) {
+                    card.classList.add('selected');
+                }
+                
+                card.innerHTML = `
+                    <h2>${escapeHtml(pl.name)}</h2>
+                    <div class="meta">${pl.itemCount || 0} items</div>
+                `;
+                
+                card.onclick = () => selectPlaylist(pl.id);
+                playlistGrid.appendChild(card);
+            });
+        }
+        
+        function selectPlaylist(playlistId) {
+            console.log('Playlist selected:', playlistId);
+            selectedPlaylistId = playlistId;
+            
+            // Persist to localStorage (unless it's a URL override)
+            if (!urlPlaylistId) {
+                try {
+                    localStorage.setItem(STORAGE_KEY, playlistId);
+                    console.log('Saved to localStorage');
+                } catch (e) {
+                    console.warn('Failed to save to localStorage:', e);
+                }
+            }
+            
+            renderPlaylistCards();
+            startPlayback();
+        }
+        
+        function startPlayback() {
+            console.log('Starting playback for playlist:', selectedPlaylistId);
+            
+            // Hide selection screen, show player
+            playlistSelection.classList.add('hidden');
+            playerContainer.classList.remove('hidden');
+            document.body.classList.add('playing');
+            
+            // Try fullscreen
+            try {
+                const elem = document.documentElement;
+                if (elem.requestFullscreen) {
+                    elem.requestFullscreen().catch(e => console.log('Fullscreen denied'));
+                } else if (elem.webkitRequestFullscreen) {
+                    elem.webkitRequestFullscreen();
+                }
+            } catch (e) {
+                console.log('Fullscreen not available:', e);
+            }
+            
+            // Start player loop
+            startPlayer();
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // ===== PLAYER LOGIC =====
         let playlist = [];
         let currentIndex = 0;
         let playlistHash = null;
@@ -119,49 +309,19 @@
         let youtubeStartTs = null;
         let youtubeMaxMs = null;
         
-        // Force fetch on page load by resetting hash
-        window.addEventListener('pageshow', ()=>{ playlistHash = null; });
-        
         const videoPlayer = document.getElementById('video-player');
         const imagePlayer = document.getElementById('image-player');
         const loading = document.getElementById('loading');
-        const fullscreenPrompt = document.getElementById('fullscreen-prompt');
-        const fullscreenBtn = document.getElementById('fullscreen-btn');
         const youtubeContainer = document.getElementById('youtube-container');
         const youtubeIframe = document.getElementById('youtube-player');
         
-        // FIXED: Simple click handler without debug overhead
-        fullscreenBtn.onclick = function() {
-            console.log('Button clicked');
-            enterFullscreen();
-        };
-        
-        function enterFullscreen() {
-            const elem = document.documentElement;
-            
-            // Try fullscreen
-            if (elem.requestFullscreen) {
-                elem.requestFullscreen().catch(e => console.log('Fullscreen denied'));
-            } else if (elem.webkitRequestFullscreen) {
-                elem.webkitRequestFullscreen();
-            }
-            
-            // Hide prompt and start player
-            fullscreenPrompt.classList.add('hidden');
-            document.body.classList.add('playing');
-            loading.classList.remove('hidden');
-            
-            // FIXED: Start fetching only after button click
-            startPlayer();
-        }
-        
         function startPlayer() {
-            console.log('Starting player');
+            console.log('Starting player with playlist:', selectedPlaylistId);
             
             // Fetch once immediately
             fetchPlaylist();
             
-            // FIXED: Clear any existing interval first
+            // Clear any existing interval first
             if (fetchInterval) {
                 clearInterval(fetchInterval);
             }
@@ -170,9 +330,44 @@
             fetchInterval = setInterval(fetchPlaylist, 10000);
         }
         
+        function stopPlayer() {
+            console.log('Stopping player');
+            if (fetchInterval) {
+                clearInterval(fetchInterval);
+                fetchInterval = null;
+            }
+            
+            // Stop all media
+            try {
+                videoPlayer.pause();
+                videoPlayer.src = '';
+            } catch (e) {}
+            
+            try {
+                imagePlayer.src = '';
+            } catch (e) {}
+            
+            try {
+                if (youtubePlayer && youtubePlayer.stopVideo) {
+                    youtubePlayer.stopVideo();
+                }
+                youtubeIframe.src = '';
+            } catch (e) {}
+            
+            isPlaying = false;
+            playlist = [];
+            currentIndex = 0;
+            playlistHash = null;
+        }
+        
         async function fetchPlaylist() {
             try {
-                const response = await fetch('/api/playlist');
+                // Fetch playlist with explicit ID
+                const url = selectedPlaylistId ? 
+                    `/api/playlist?playlist_id=${encodeURIComponent(selectedPlaylistId)}` : 
+                    '/api/playlist';
+                
+                const response = await fetch(url);
                 
                 if (!response.ok) {
                     throw new Error('API error');
@@ -182,17 +377,22 @@
                 
                 // Check if playlist changed
                 if (data.hash !== playlistHash) {
-                    console.log('Playlist updated:', data.count, 'items');
+                    console.log('Playlist updated:', playlist.length === 0 ? 'first load' : 'content changed');
+                    const wasEmpty = playlist.length === 0;
                     playlist = data.playlist || [];
                     playlistHash = data.hash;
                     
                     if (playlist.length > 0) {
                         loading.classList.add('hidden');
-                        currentIndex = 0;
-                        isPlaying = false; // Reset flag
-                        playNext();
+                        // Only start playback if this is the first load (playlist was empty)
+                        if (wasEmpty) {
+                            currentIndex = 0;
+                            isPlaying = false;
+                            playNext();
+                        }
+                        // If playlist changed during playback, the next item will pick up new content
                     } else {
-                        loading.textContent = 'No content';
+                        loading.textContent = 'No content in playlist';
                         loading.classList.remove('hidden');
                     }
                 }
@@ -504,6 +704,15 @@
             setInterval(pollCommands, 2000);
             // YouTube watchdog every 5s
             setInterval(youtubeWatchdog, 5000);
+        
+        // ===== INITIALIZE =====
+        // Prevent context menu
+        document.oncontextmenu = () => false;
+        
+        // Load playlists on page load
+        loadPlaylists();
+        
+        console.log('Ready - Playlist selection mode');
     </script>
 </body>
 </html>

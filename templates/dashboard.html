@@ -395,29 +395,29 @@
                 <!-- Playlists manager (multi-playlist) -->
                 <div class="card" aria-labelledby="playlistsHeading" style="margin-bottom:12px">
                     <div class="section-header"><h2 id="playlistsHeading">📂 Playlists</h2></div>
-                    <div class="muted" style="margin-bottom:8px">Create, select active, or delete playlists. Active playlist is used by Web Player.</div>
+                    <div class="muted" style="margin-bottom:8px">Create, edit, or delete playlists. Web players choose their own playlist independently.</div>
                     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
                         <select id="playlistSelector" style="padding:8px;border-radius:8px;border:1px solid rgba(15,23,42,0.08)"></select>
-                        <button id="selectActiveBtn" class="save-mode-btn" style="background:linear-gradient(90deg,#10b981,#34d399)">Set Active</button>
+                        <button id="editPlaylistBtn" class="save-mode-btn" style="background:linear-gradient(90deg,#10b981,#34d399)">Edit</button>
                         <input id="newPlaylistName" placeholder="New playlist name" style="padding:8px;border-radius:8px;border:1px solid rgba(15,23,42,0.08)" />
                         <button id="createPlaylistBtn" class="save-mode-btn">Create</button>
                         <button id="duplicatePlaylistBtn" class="save-mode-btn" style="background:linear-gradient(90deg,#64748b,#334155)">Duplicate</button>
                         <button id="renamePlaylistBtn" class="save-mode-btn" style="background:linear-gradient(90deg,#f59e0b,#f97316)">Rename</button>
                         <button id="deletePlaylistBtn" class="delete-btn" style="padding:8px 12px">Delete</button>
-                        <div id="activePlaylistBadge" class="file-badge" style="margin-left:auto"></div>
+                        <div id="currentEditingBadge" class="file-badge" style="margin-left:auto"></div>
                     </div>
                 </div>
 
                 <!-- Playlist panel -->
                 <div class="card" aria-labelledby="playlistHeading" style="margin-bottom:12px">
-                    <div class="section-header"><h2 id="playlistHeading">🎵 Playlist (Ordered) <span id="activeNameTag" class="file-badge" style="margin-left:8px"></span></h2></div>
-                    <div style="margin-bottom:8px;color:var(--muted);font-size:0.92rem">Drag to reorder. Set "Repeat" to play an item consecutively.</div>
+                    <div class="section-header"><h2 id="playlistHeading">🎵 Playlist Editor <span id="activeNameTag" class="file-badge" style="margin-left:8px"></span></h2></div>
+                    <div style="margin-bottom:8px;color:var(--muted);font-size:0.92rem">Drag to reorder. Set "Repeat" to play an item consecutively. Changes save to the selected playlist.</div>
                     <div id="playlistPanel">
                         <ul id="playlistList" style="list-style:none;display:flex;flex-direction:column;gap:8px;padding:0;margin:0">
-                            <li class="file-item muted">Loading playlist…</li>
+                            <li class="file-item muted">Select a playlist to edit…</li>
                         </ul>
                         <div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end">
-                            <button id="savePlaylistOrder" class="save-mode-btn">Save Order</button>
+                            <button id="savePlaylistOrder" class="save-mode-btn">Save Playist</button>
                         </div>
                     </div>
                 </div>
@@ -913,77 +913,52 @@
     });
 })();
 
-/* Playlist checkbox toggle via AJAX */
-(function(){
-    const checkboxes = document.querySelectorAll('.playlist-checkbox');
-    checkboxes.forEach(checkbox => {
-        checkbox.addEventListener('change', async (e) => {
-            // support both data-file and data-filename (backwards compatibility)
-            const dataset = e.target.dataset || {};
-            const filename = dataset.file || dataset.filename || dataset.name || '';
-            const contentType = dataset.contentType || dataset.content_type || e.target.getAttribute('data-content-type') || 'video';
+let currentEditingPlaylistId = null;
+let currentEditingPlaylistName = null;
+let currentPlaylistItems = [];
 
-            if (!filename) {
-                console.error('Playlist toggle: no filename/url found on checkbox', e.target);
-                alert('Failed to update playlist: missing filename');
-                e.target.checked = !e.target.checked;
-                return;
-            }
-
-            try {
-                const response = await fetch(`/control/toggle_playlist/${contentType}/${encodeURIComponent(filename)}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-
-                const data = await response.json();
-                if (!data.ok) {
-                    alert('Failed to update playlist: ' + (data.error || 'Unknown error'));
-                    e.target.checked = !e.target.checked; // revert
-                } else {
-                    // success — refresh playlist panel to reflect changes
-                    fetchPlaylistOrder().catch(()=>{});
-                }
-            } catch (err) {
-                console.error('Playlist toggle error:', err);
-                alert('Error updating playlist');
-                e.target.checked = !e.target.checked; // revert
-            }
-        });
+function normalizePlaylistItems(items){
+    const out = [];
+    (items || []).forEach(it => {
+        if(!it) return;
+        if(typeof it === 'string'){
+            out.push({name: it, repeats: 1});
+            return;
+        }
+        if(typeof it === 'object' && it.name){
+            const repeats = Math.max(1, parseInt(it.repeats) || 1);
+            out.push({name: it.name, repeats});
+        }
     });
-})();
-
-
-// Playlist panel: fetch, render, reorder & save
-async function fetchPlaylistOrder(){
-    try{
-        const res = await fetch('/api/playlist_order');
-        if (!res.ok) throw new Error('Failed to fetch');
-        const j = await res.json();
-        if (!j.ok) throw new Error(j.error || 'Bad response');
-        renderPlaylistPanel(j.playlist || []);
-        return j.playlist || [];
-    }catch(err){
-        console.error('Playlist fetch failed', err);
-        const ul = document.getElementById('playlistList');
-        if(ul) ul.innerHTML = '<li class="file-item muted">Failed to load playlist</li>';
-        return [];
-    }
+    return out;
 }
 
-function renderPlaylistPanel(items){
-    const ul = document.getElementById('playlistList');
-    if(!ul) return;
-    ul.innerHTML = '';
-    if(!items || items.length === 0){
-        ul.innerHTML = '<li class="file-item" style="justify-content:center"><div class="muted">Playlist empty</div></li>';
+function syncCheckboxesFromState(){
+    const names = new Set(currentPlaylistItems.map(it => it.name));
+    document.querySelectorAll('.playlist-checkbox').forEach(cb => {
+        const dataset = cb.dataset || {};
+        const filename = dataset.file || dataset.filename || dataset.name || '';
+        if(!filename) return;
+        cb.checked = names.has(filename);
+    });
+}
+
+function renderPlaylistEditorFromState(){
+    const list = document.getElementById('playlistList');
+    if(!list) return;
+    list.innerHTML = '';
+
+    if(!currentEditingPlaylistId){
+        list.innerHTML = '<li class="file-item muted">Select a playlist to edit…</li>';
         return;
     }
 
-    items.forEach((it, idx) => {
-        const name = (typeof it === 'string') ? it : (it.name || '');
-        const repeats = (typeof it === 'string') ? 1 : (it.repeats || 1);
+    if(currentPlaylistItems.length === 0){
+        list.innerHTML = '<li class="file-item muted">Playlist is empty. Check items below to add them, then save.</li>';
+        return;
+    }
 
+    currentPlaylistItems.forEach((item, idx) => {
         const li = document.createElement('li');
         li.className = 'file-item';
         li.draggable = true;
@@ -992,62 +967,85 @@ function renderPlaylistPanel(items){
             <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
                 <div style="width:18px;cursor:grab">☰</div>
                 <div class="file-info">
-                    <div class="file-name">${name}</div>
+                    <div class="file-name">${item.name}</div>
                 </div>
             </div>
             <div style="display:flex;gap:8px;align-items:center">
                 <label style="font-size:0.9rem;color:var(--muted)">Repeat
-                    <input type="number" min="1" value="${repeats}" class="playlist-repeat" data-name="${encodeURIComponent(name)}" style="width:64px;margin-left:8px;padding:6px;border-radius:8px;border:1px solid rgba(15,23,42,0.06);text-align:center">
+                    <input type="number" min="1" value="${item.repeats || 1}" class="playlist-repeat" style="width:64px;margin-left:8px;padding:6px;border-radius:8px;border:1px solid rgba(15,23,42,0.06);text-align:center">
                 </label>
             </div>
         `;
 
-        // drag events
-        li.addEventListener('dragstart', (e)=>{ e.dataTransfer.setData('text/plain', String(idx)); li.style.opacity = '0.4'; });
-        li.addEventListener('dragend', (e)=>{ li.style.opacity = ''; });
+        const repeatInput = li.querySelector('.playlist-repeat');
+        if(repeatInput){
+            repeatInput.addEventListener('change', () => {
+                const val = Math.max(1, parseInt(repeatInput.value) || 1);
+                repeatInput.value = val;
+                currentPlaylistItems[idx].repeats = val;
+            });
+        }
+
+        li.addEventListener('dragstart', (e)=>{
+            e.dataTransfer.setData('text/plain', String(idx));
+            li.style.opacity = '0.4';
+        });
+        li.addEventListener('dragend', ()=>{ li.style.opacity = ''; });
         li.addEventListener('dragover', (e)=>{ e.preventDefault(); });
         li.addEventListener('drop', (e)=>{
             e.preventDefault();
             const from = Number(e.dataTransfer.getData('text/plain'));
-            const to = Array.from(ul.children).indexOf(li);
-            if(isNaN(from) || to < 0) return;
-            const node = items.splice(from,1)[0];
-            items.splice(to,0,node);
-            renderPlaylistPanel(items);
+            const to = idx;
+            if(Number.isNaN(from) || to < 0) return;
+            const moved = currentPlaylistItems.splice(from,1)[0];
+            currentPlaylistItems.splice(to,0,moved);
+            renderPlaylistEditorFromState();
+            syncCheckboxesFromState();
         });
 
-        ul.appendChild(li);
+        list.appendChild(li);
     });
-
-    // wire save button
-    const saveBtn = document.getElementById('savePlaylistOrder');
-    if(saveBtn){
-        saveBtn.onclick = async function(){
-            // collect ordered items and repeats
-            const list = Array.from(document.querySelectorAll('#playlistList .file-item'));
-            const out = [];
-            for(const li of list){
-                const nameEl = li.querySelector('.file-name');
-                const input = li.querySelector('.playlist-repeat');
-                const nm = nameEl ? nameEl.textContent.trim() : null;
-                const r = input ? Math.max(1, parseInt(input.value)||1) : 1;
-                if(nm) out.push({name: nm, repeats: r});
-            }
-
-            try{
-                const res = await fetch('/api/playlist_order', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(out)});
-                const j = await res.json();
-                if(!j.ok) throw new Error(j.error || 'Failed to save');
-                alert('Playlist order saved');
-                // refresh full page to update checkboxes and state
-                setTimeout(()=> { location.reload(); }, 300);
-            }catch(err){
-                console.error('Save playlist failed', err);
-                alert('Failed to save playlist order');
-            }
-        };
-    }
 }
+
+/* Playlist checkbox toggle via AJAX */
+(function(){
+    const checkboxes = document.querySelectorAll('.playlist-checkbox');
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', (e) => {
+            if(!currentEditingPlaylistId){
+                alert('Select a playlist to edit by clicking the Edit button');
+                e.target.checked = !e.target.checked;
+                return;
+            }
+
+            const dataset = e.target.dataset || {};
+            const filename = dataset.file || dataset.filename || dataset.name || '';
+            if (!filename) {
+                console.error('Playlist toggle: no filename/url found on checkbox', e.target);
+                alert('Failed to update playlist: missing filename');
+                e.target.checked = !e.target.checked;
+                return;
+            }
+
+            const idx = currentPlaylistItems.findIndex(it => it.name === filename);
+            if(e.target.checked){
+                if(idx === -1){
+                    currentPlaylistItems.push({name: filename, repeats: 1});
+                }
+            } else {
+                if(idx !== -1){
+                    currentPlaylistItems.splice(idx,1);
+                }
+            }
+
+            renderPlaylistEditorFromState();
+            syncCheckboxesFromState();
+        });
+    });
+})();
+
+
+// Playlist editor: state is staged locally and saved only when the Save button is clicked.
 
 // Initial load and refresh on page show
 document.addEventListener('DOMContentLoaded', ()=>{ 
@@ -1057,8 +1055,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
             const res = await fetch('/api/playlists');
             const j = await res.json();
             const sel = document.getElementById('playlistSelector');
-            const badge = document.getElementById('activePlaylistBadge');
-            const tag = document.getElementById('activeNameTag');
+            const badge = document.getElementById('currentEditingBadge');
             if(sel){
                 sel.innerHTML = '';
                 (j.playlists||[]).forEach(p => {
@@ -1066,38 +1063,81 @@ document.addEventListener('DOMContentLoaded', ()=>{
                     opt.value = p.name; opt.textContent = p.name;
                     sel.appendChild(opt);
                 });
-                const activeId = j.active_playlist_id;
-                const activeName = (j.playlists||[]).find(p=>p.id===activeId)?.name;
-                if(activeName) sel.value = activeName;
             }
             if(badge){
-                const activeId = j.active_playlist_id;
-                const activeName = (j.playlists||[]).find(p=>p.id===activeId)?.name;
-                badge.textContent = activeName ? ('Active: '+activeName) : 'Active: (legacy)';
-                if(tag){ tag.textContent = activeName ? activeName : 'legacy'; }
+                badge.textContent = 'No playlist selected';
             }
         }catch(e){ console.warn('Failed to load playlists', e); }
     })();
 
-    // Wire actions
-    const selectBtn = document.getElementById('selectActiveBtn');
-    if(selectBtn){
-        selectBtn.onclick = async function(){
+    // Wire actions - Edit button loads playlist into editor (staged changes)
+    const editBtn = document.getElementById('editPlaylistBtn');
+    if(editBtn){
+        editBtn.onclick = async function(){
             const sel = document.getElementById('playlistSelector');
             const name = sel && sel.value;
-            if(!name) return alert('Select a playlist');
+            if(!name) return alert('Select a playlist to edit');
+            
+            // Find playlist by name
             const listRes = await fetch('/api/playlists');
             const list = await listRes.json();
             const target = (list.playlists||[]).find(p=>p.name===name);
             if(!target) return alert('Playlist not found');
-            const res = await fetch('/api/playlists/set_active', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({playlist_id: target.id})});
-            const j = await res.json();
-            if(!j.active_playlist_id) return alert(j.error||'Failed to set active');
-            alert('Active playlist set to '+name);
-            location.reload();
+            
+            // Load playlist into editor
+            currentEditingPlaylistId = target.id;
+            currentEditingPlaylistName = target.name;
+            
+            // Fetch playlist items and normalize to staging state
+            const plRes = await fetch('/api/playlists/' + target.id);
+            const plData = await plRes.json();
+            currentPlaylistItems = normalizePlaylistItems(plData.playlist && plData.playlist.items);
+            
+            // Update badge to show what we're editing
+            const badge = document.getElementById('currentEditingBadge');
+            if(badge) badge.textContent = 'Editing: ' + name;
+            
+            const nameTag = document.getElementById('activeNameTag');
+            if(nameTag) nameTag.textContent = name;
+            
+            // Render editor from staged state
+            renderPlaylistEditorFromState();
+            syncCheckboxesFromState();
         };
     }
 
+    const saveBtn = document.getElementById('savePlaylistOrder');
+    if(saveBtn){
+        saveBtn.onclick = async function(){
+            if(!currentEditingPlaylistId){
+                return alert('No playlist selected for editing. Click Edit to load a playlist first.');
+            }
+            
+            if(currentPlaylistItems.length === 0){
+                return alert('Playlist is empty. Add items before saving.');
+            }
+            
+            try{
+                // Save staged items to specific playlist by ID
+                const res = await fetch('/api/playlists/' + currentEditingPlaylistId + '/reorder', {
+                    method:'POST', 
+                    headers:{'Content-Type':'application/json'}, 
+                    body: JSON.stringify({items: currentPlaylistItems})
+                });
+                const j = await res.json();
+                if(!j.playlist) throw new Error(j.error || 'Failed to save');
+                alert('Playlist "' + currentEditingPlaylistName + '" saved');
+                renderPlaylistEditorFromState();
+            }catch(err){
+                console.error('Save playlist failed', err);
+                alert('Failed to save playlist: ' + err.message);
+            }
+        };
+    }
+
+    // Wire actions - Playlist management buttons
+
+    // Wire actions - Playlist management buttons
     const createBtn = document.getElementById('createPlaylistBtn');
     if(createBtn){
         createBtn.onclick = async function(){
@@ -1144,11 +1184,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
                 sel.innerHTML='';
                 (j2.playlists||[]).forEach(n=>{ const o=document.createElement('option'); o.value=n.name; o.textContent=n.name; sel.appendChild(o); });
             }
-            const badge = document.getElementById('activePlaylistBadge');
-            const active = j2.active_playlist_id;
-            const activeName = (j2.playlists||[]).find(p=>p.id===active)?.name;
-            if(badge) badge.textContent = activeName ? ('Active: '+activeName) : 'Active: (legacy)';
-            fetchPlaylistOrder().catch(()=>{});
+            const badge = document.getElementById('currentEditingBadge');
+            if(badge) badge.textContent = 'No playlist selected';
+            currentEditingPlaylistId = null;
+            currentEditingPlaylistName = null;
+            currentPlaylistItems = [];
+            renderPlaylistEditorFromState();
         };
     }
 
@@ -1198,19 +1239,23 @@ document.addEventListener('DOMContentLoaded', ()=>{
                 (j2.playlists||[]).forEach(n=>{ const o=document.createElement('option'); o.value=n.name; o.textContent=n.name; sel.appendChild(o); });
                 sel.value = newName;
             }
-            const badge = document.getElementById('activePlaylistBadge');
-            const active = j2.active_playlist_id;
-            const activeName = (j2.playlists||[]).find(p=>p.id===active)?.name;
-            if(badge) badge.textContent = activeName ? ('Active: '+activeName) : 'Active: (legacy)';
+            currentEditingPlaylistName = newName;
+            const badge = document.getElementById('currentEditingBadge');
+            if(badge) badge.textContent = 'Editing: ' + newName;
         };
     }
 
-    fetchPlaylistOrder().catch(()=>{});
 });
-window.addEventListener('pageshow', ()=>{ fetchPlaylistOrder().catch(()=>{}); });
+window.addEventListener('pageshow', ()=>{ renderPlaylistEditorFromState(); });
 
-// Auto-refresh playlist every 5 seconds to catch uploads
-setInterval(()=>{ fetchPlaylistOrder().catch(()=>{}); }, 5000);
+// Auto-refresh playlists list every 5 seconds to show new uploads
+setInterval(async ()=>{ 
+    try{
+        const res = await fetch('/api/playlists');
+        const j = await res.json();
+        // Update selector if needed
+    }catch(e){}
+}, 5000);
 
 // System stats: define functions first, then attach listeners
 function getBarClass(percent){
