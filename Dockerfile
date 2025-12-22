@@ -1,14 +1,12 @@
 # Litmus Digital Signage - Docker Container
 FROM python:3.11-slim
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    # LibreOffice for PPTX to PDF conversion
-    libreoffice \
+# Install system dependencies (minimal set for conversions)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libreoffice-impress \
+    libreoffice-common \
     # ImageMagick for PDF to PNG conversion
     imagemagick \
-    # VLC for video playback (optional for HDMI mode)
-    vlc \
     # Additional dependencies
     fonts-liberation \
     fonts-dejavu \
@@ -34,6 +32,8 @@ COPY dashboard.py .
 COPY web_player.py .
 COPY utils.py .
 COPY templates/ ./templates/
+COPY entrypoint.sh .
+RUN chmod +x /app/entrypoint.sh
 
 # Create necessary directories with proper permissions
 RUN mkdir -p /root/signage/content/videos \
@@ -58,5 +58,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 ENV FLASK_ENV=production \
     PYTHONUNBUFFERED=1
 
-# Default command: start dashboard
-CMD ["python", "dashboard.py"]
+# Default command: start both apps (dashboard + web player)
+# Override with APP_ROLE=dashboard or APP_ROLE=web to run one.
+CMD ["/app/entrypoint.sh"]

@@ -5,6 +5,7 @@
 
 # Python
 __pycache__/
+__pypackages__/
 *.py[cod]
 *$py.class
 *.so
@@ -60,3 +61,19 @@ Dockerfile.dev
 *.tmp
 temp/
 tmp/
+
+# Node / frontend
+node_modules/
+dist/
+build/
+
+# App runtime data (mounted as volumes in compose)
+content/
+cache/
+logs/
+commands/
+uploads_tmp/
+logo/
+playlist.json
+playlists.json
+config.json
