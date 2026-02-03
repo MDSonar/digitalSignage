@@ -115,6 +115,91 @@ def get_file_size_from_bytes(size):
         size /= 1024.0
     return f"{size:.1f} TB"
 
+
+def convert_presentation_to_slides(presentation_path: Path):
+    """Convert presentation (PPTX/PPT/PDF) to PNG slides.
+    
+    Pipeline:
+    1. If PPTX/PPT: Convert to PDF using LibreOffice
+    2. Convert PDF to PNG images using ImageMagick
+    3. Save PNGs to cache/slides/{stem}/slide_001.png, slide_002.png, etc.
+    """
+    try:
+        stem = presentation_path.stem
+        cache_path = CACHE_DIR / stem
+        cache_path.mkdir(parents=True, exist_ok=True)
+        
+        logger.info(f"Converting {presentation_path.name} to slides...")
+        
+        # Step 1: Convert to PDF if not already PDF
+        if presentation_path.suffix.lower() in ['.pptx', '.ppt']:
+            pdf_path = cache_path / f"{stem}.pdf"
+            
+            # Try LibreOffice conversion
+            try:
+                # Use soffice for conversion (LibreOffice headless)
+                cmd = [
+                    'soffice',
+                    '--headless',
+                    '--convert-to', 'pdf',
+                    '--outdir', str(cache_path),
+                    str(presentation_path)
+                ]
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+                
+                if result.returncode != 0:
+                    logger.error(f"LibreOffice conversion failed: {result.stderr}")
+                    return False
+                    
+                logger.info(f"✓ Converted to PDF: {pdf_path}")
+            except FileNotFoundError:
+                logger.error("LibreOffice (soffice) not found. Install libreoffice-impress.")
+                return False
+            except subprocess.TimeoutExpired:
+                logger.error("LibreOffice conversion timed out")
+                return False
+        else:
+            # Already a PDF
+            pdf_path = presentation_path
+        
+        # Step 2: Convert PDF to PNG images using ImageMagick
+        if pdf_path.exists():
+            try:
+                # Use ImageMagick convert command
+                output_pattern = str(cache_path / "slide_%03d.png")
+                cmd = [
+                    'convert',
+                    '-density', '150',  # DPI for quality
+                    str(pdf_path),
+                    output_pattern
+                ]
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+                
+                if result.returncode != 0:
+                    logger.error(f"ImageMagick conversion failed: {result.stderr}")
+                    return False
+                
+                # Count generated slides
+                slides = list(cache_path.glob("slide_*.png"))
+                logger.info(f"✓ Generated {len(slides)} slides in {cache_path}")
+                
+                # Clean up intermediate PDF if we created it
+                if pdf_path != presentation_path and pdf_path.exists():
+                    pdf_path.unlink()
+                
+                return True
+            except FileNotFoundError:
+                logger.error("ImageMagick (convert) not found. Install imagemagick.")
+                return False
+            except subprocess.TimeoutExpired:
+                logger.error("ImageMagick conversion timed out")
+                return False
+        
+        return False
+    except Exception:
+        logger.exception(f"Failed to convert presentation {presentation_path.name}")
+        return False
+
 def read_playlist():
     try:
         if not PLAYLIST_FILE.exists():
@@ -565,8 +650,10 @@ def upload_chunk(content_type):
             except Exception:
                 logger.exception('Failed to cleanup tmp upload dir')
 
-            # Note: Presentation conversion to slides is not performed in this setup
-            # Web player uses native video playback instead of slide conversion
+            # Convert presentation to slides if it's a presentation
+            if content_type == 'presentation':
+                logger.info(f'Starting presentation conversion for {safe_name}')
+                convert_presentation_to_slides(final_path)
 
         return jsonify({'ok': True, 'index': index, 'total': total})
     except Exception:
