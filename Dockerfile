@@ -7,6 +7,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libreoffice-common \
     # ImageMagick for PDF to PNG conversion
     imagemagick \
+    # Ghostscript required by ImageMagick for PDF processing
+    ghostscript \
     # Additional dependencies
     fonts-liberation \
     fonts-dejavu \
