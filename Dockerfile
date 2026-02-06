@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-liberation \
     fonts-dejavu \
     curl \
+    dos2unix \
     # Cleanup
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -34,8 +35,9 @@ COPY dashboard.py .
 COPY web_player.py .
 COPY utils.py .
 COPY templates/ ./templates/
-COPY entrypoint.sh .
-RUN chmod +x /app/entrypoint.sh
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh && \
+    dos2unix /app/entrypoint.sh || true
 
 # Create necessary directories with proper permissions
 RUN mkdir -p /root/signage/content/videos \
