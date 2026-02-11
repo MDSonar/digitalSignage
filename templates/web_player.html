@@ -20,8 +20,12 @@
         }
         
         body.playing {
-            cursor: none;
+            cursor: auto;
             background: #000;
+        }
+        
+        body.playing.cursor-hidden {
+            cursor: none;
         }
         
         /* Playlist Selection Screen */
@@ -152,8 +156,11 @@
             cursor: pointer;
             box-shadow: 0 8px 20px rgba(0,0,0,0.25);
             backdrop-filter: blur(6px);
+            opacity: 1;
+            transition: opacity 0.3s ease-in-out;
         }
         #switch-playlist-btn:hover { background: rgba(255,255,255,0.18); }
+        #switch-playlist-btn.hidden-controls { opacity: 0; pointer-events: none; }
     </style>
 </head>
 <body>
@@ -322,6 +329,9 @@
             playerContainer.classList.remove('hidden');
             document.body.classList.add('playing');
             switchBtn.classList.remove('hidden');
+            
+            // Initialize cursor/controls auto-hide
+            initAutoHideControls();
             
             // Try fullscreen
             try {
@@ -696,6 +706,60 @@
                     }
                 }
             }
+        }
+
+        // ===== AUTO-HIDE CURSOR AND CONTROLS =====
+        let cursorHideTimeout = null;
+        let controlsHideTimeout = null;
+        const CURSOR_HIDE_DELAY = 3000; // 3 seconds
+        const CONTROLS_HIDE_DELAY = 5000; // 5 seconds
+        
+        function initAutoHideControls() {
+            // Show cursor and controls initially
+            document.body.classList.remove('cursor-hidden');
+            switchBtn.classList.remove('hidden-controls');
+            
+            // Reset timers
+            resetCursorTimer();
+            resetControlsTimer();
+            
+            // Listen for mouse movement and touch events
+            const activityEvents = ['mousemove', 'mousedown', 'touchstart', 'touchmove'];
+            activityEvents.forEach(eventType => {
+                document.addEventListener(eventType, handleUserActivity);
+            });
+        }
+        
+        function handleUserActivity() {
+            // Show cursor and controls
+            document.body.classList.remove('cursor-hidden');
+            switchBtn.classList.remove('hidden-controls');
+            
+            // Reset hide timers
+            resetCursorTimer();
+            resetControlsTimer();
+        }
+        
+        function resetCursorTimer() {
+            if (cursorHideTimeout) {
+                clearTimeout(cursorHideTimeout);
+            }
+            cursorHideTimeout = setTimeout(() => {
+                if (document.body.classList.contains('playing')) {
+                    document.body.classList.add('cursor-hidden');
+                }
+            }, CURSOR_HIDE_DELAY);
+        }
+        
+        function resetControlsTimer() {
+            if (controlsHideTimeout) {
+                clearTimeout(controlsHideTimeout);
+            }
+            controlsHideTimeout = setTimeout(() => {
+                if (document.body.classList.contains('playing')) {
+                    switchBtn.classList.add('hidden-controls');
+                }
+            }, CONTROLS_HIDE_DELAY);
         }
 
         // Prevent context menu
