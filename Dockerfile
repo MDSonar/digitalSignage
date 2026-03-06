@@ -42,6 +42,7 @@ RUN chmod +x /app/entrypoint.sh && \
 # Create necessary directories with proper permissions
 RUN mkdir -p /root/signage/content/videos \
     /root/signage/content/presentations \
+    /root/signage/content/quote_backgrounds \
     /root/signage/cache/slides \
     /root/signage/logs \
     /root/signage/logo \

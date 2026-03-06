@@ -20,6 +20,7 @@ import json
 from pathlib import PurePath
 import platform
 import hashlib
+import uuid
 from utils import (
     read_playlists, write_playlists, ensure_playlist_store, get_playlist_by_id,
     create_playlist, update_playlist, delete_playlist, duplicate_playlist,
@@ -54,6 +55,9 @@ CONFIG_FILE = Path.home() / 'signage' / 'config.json'
 PLAYLIST_FILE = Path.home() / 'signage' / 'playlist.json'
 PLAYLISTS_DIR = Path.home() / 'signage' / 'playlists'
 PLAYLISTS_DIR.mkdir(parents=True, exist_ok=True)
+QUOTES_FILE = Path.home() / 'signage' / 'quotes.json'
+QUOTE_BACKGROUNDS_DIR = Path.home() / 'signage' / 'content' / 'quote_backgrounds'
+QUOTE_BACKGROUNDS_DIR.mkdir(parents=True, exist_ok=True)
 WEB_PLAYER_PID = Path.home() / 'signage' / 'web_player.pid'
 SIGNAGE_PLAYER_PID = Path.home() / 'signage' / 'signage_player.pid'
 COMMANDS_DIR = Path.home() / 'signage' / 'commands'
@@ -66,6 +70,7 @@ UPLOAD_TMP_DIR = Path.home() / 'signage' / 'uploads_tmp'
 UPLOAD_TMP_DIR.mkdir(parents=True, exist_ok=True)
 ALLOWED_VIDEO_EXTENSIONS = {'.mp4', '.avi', '.mov', '.mkv', '.webm'}
 ALLOWED_PPT_EXTENSIONS = {'.pptx', '.ppt', '.pdf'}
+ALLOWED_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
 
 USERS = {'admin': generate_password_hash('signage')}
 
@@ -340,6 +345,32 @@ def write_youtube_links(data):
         return True
     except Exception:
         logger.exception("Failed to write youtube links")
+        return False
+
+
+def read_quotes():
+    """Read quotes data from quotes.json"""
+    try:
+        if QUOTES_FILE.exists():
+            return json.loads(QUOTES_FILE.read_text())
+    except Exception:
+        logger.exception("Failed to read quotes")
+    # Default structure
+    return {
+        'quotes': [],
+        'settings': {
+            'duration': 60,  # seconds per quote
+            'shuffle': False
+        }
+    }
+
+def write_quotes(data):
+    """Write quotes data to quotes.json"""
+    try:
+        QUOTES_FILE.write_text(json.dumps(data, indent=2))
+        return True
+    except Exception:
+        logger.exception("Failed to write quotes")
         return False
 
 
@@ -688,6 +719,153 @@ def delete_youtube_link():
     remove_from_playlist(url)
     flash("YouTube link deleted!", "success")
     return redirect(url_for("dashboard"))
+
+
+# ===== QUOTES MANAGEMENT ROUTES =====
+@app.route('/api/quotes', methods=['GET'])
+def api_quotes_get():
+    """Return quotes data including settings"""
+    data = read_quotes()
+    return jsonify(data)
+
+@app.route('/api/quotes', methods=['POST'])
+@login_required
+def api_quotes_add():
+    """Add a new quote"""
+    try:
+        quote_text = request.form.get('text', '').strip()
+        author = request.form.get('author', '').strip()
+        background = request.form.get('background', '')
+        
+        if not quote_text:
+            return jsonify({'ok': False, 'error': 'Quote text required'}), 400
+        
+        data = read_quotes()
+        quote_id = str(uuid.uuid4())
+        
+        data['quotes'].append({
+            'id': quote_id,
+            'text': quote_text,
+            'author': author,
+            'background': background
+        })
+        
+        if write_quotes(data):
+            return jsonify({'ok': True, 'id': quote_id})
+        return jsonify({'ok': False, 'error': 'Failed to save'}), 500
+    except Exception:
+        logger.exception('Failed to add quote')
+        return jsonify({'ok': False, 'error': 'Server error'}), 500
+
+@app.route('/api/quotes/<quote_id>', methods=['PUT'])
+@login_required
+def api_quotes_update(quote_id):
+    """Update an existing quote"""
+    try:
+        quote_text = request.form.get('text', '').strip()
+        author = request.form.get('author', '').strip()
+        background = request.form.get('background', '')
+        
+        data = read_quotes()
+        found = False
+        
+        for q in data['quotes']:
+            if q.get('id') == quote_id:
+                q['text'] = quote_text
+                q['author'] = author
+                q['background'] = background
+                found = True
+                break
+        
+        if not found:
+            return jsonify({'ok': False, 'error': 'Quote not found'}), 404
+        
+        if write_quotes(data):
+            return jsonify({'ok': True})
+        return jsonify({'ok': False, 'error': 'Failed to save'}), 500
+    except Exception:
+        logger.exception('Failed to update quote')
+        return jsonify({'ok': False, 'error': 'Server error'}), 500
+
+@app.route('/api/quotes/<quote_id>', methods=['DELETE'])
+@login_required
+def api_quotes_delete(quote_id):
+    """Delete a quote"""
+    try:
+        data = read_quotes()
+        original_len = len(data['quotes'])
+        data['quotes'] = [q for q in data['quotes'] if q.get('id') != quote_id]
+        
+        if len(data['quotes']) == original_len:
+            return jsonify({'ok': False, 'error': 'Quote not found'}), 404
+        
+        if write_quotes(data):
+            return jsonify({'ok': True})
+        return jsonify({'ok': False, 'error': 'Failed to save'}), 500
+    except Exception:
+        logger.exception('Failed to delete quote')
+        return jsonify({'ok': False, 'error': 'Server error'}), 500
+
+@app.route('/api/quotes/settings', methods=['POST'])
+@login_required
+def api_quotes_settings():
+    """Update quotes settings (duration, shuffle)"""
+    try:
+        duration = request.form.get('duration', type=int)
+        shuffle = request.form.get('shuffle', 'false').lower() == 'true'
+        
+        data = read_quotes()
+        if duration is not None:
+            data['settings']['duration'] = max(5, min(300, duration))  # 5-300 seconds
+        data['settings']['shuffle'] = shuffle
+        
+        if write_quotes(data):
+            return jsonify({'ok': True, 'settings': data['settings']})
+        return jsonify({'ok': False, 'error': 'Failed to save'}), 500
+    except Exception:
+        logger.exception('Failed to update settings')
+        return jsonify({'ok': False, 'error': 'Server error'}), 500
+
+@app.route('/upload_quote_background', methods=['POST'])
+@login_required
+def upload_quote_background():
+    """Upload a background image for quotes"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'ok': False, 'error': 'No file'}), 400
+        
+        file = request.files['file']
+        if not file.filename:
+            return jsonify({'ok': False, 'error': 'No file selected'}), 400
+        
+        filename = secure_filename(file.filename)
+        if not allowed_file(filename, ALLOWED_IMAGE_EXTENSIONS):
+            return jsonify({'ok': False, 'error': 'Invalid file type. Allowed: jpg, png, gif, webp'}), 400
+        
+        filepath = QUOTE_BACKGROUNDS_DIR / filename
+        file.save(str(filepath))
+        
+        logger.info(f'Uploaded quote background: {filename}')
+        return jsonify({'ok': True, 'filename': filename})
+    except Exception:
+        logger.exception('Failed to upload quote background')
+        return jsonify({'ok': False, 'error': 'Upload failed'}), 500
+
+
+@app.route('/api/quote_backgrounds', methods=['GET'])
+@login_required
+def api_quote_backgrounds_list():
+    """Return list of filenames in the quote backgrounds directory"""
+    try:
+        files = []
+        if QUOTE_BACKGROUNDS_DIR.exists():
+            for p in sorted(QUOTE_BACKGROUNDS_DIR.iterdir()):
+                if p.is_file():
+                    files.append(p.name)
+        return jsonify({'ok': True, 'files': files})
+    except Exception:
+        logger.exception('Failed to list quote backgrounds')
+        return jsonify({'ok': False, 'files': []}), 500
 
 @app.route('/')
 def index():

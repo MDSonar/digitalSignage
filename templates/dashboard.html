@@ -639,6 +639,79 @@
             </div>
         </div>
 
+        <!-- INSPIRATIONAL QUOTES SECTION -->
+        <div class="container">
+            <div class="app" role="application">
+                <div class="content" role="main">
+                    <div class="card" aria-labelledby="quotesHeading" style="margin-bottom:12px">
+                        <div class="section-header"><h2 id="quotesHeading">✨ Inspirational Quotes</h2></div>
+                        <div class="muted" style="margin-bottom:8px">Manage quotes and backgrounds for the Quotes slide show.</div>
+
+                        <!-- Quotes Settings -->
+                        <div style="background:#f9fafb;padding:12px;border-radius:8px;margin-bottom:12px">
+                            <h3 style="font-size:0.95em;font-weight:600;margin-bottom:8px">Settings</h3>
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                                <div>
+                                    <label style="font-size:0.9em;color:var(--muted)">Duration per Quote (seconds)</label>
+                                    <input id="quotesDuration" type="number" min="5" max="300" value="60" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:6px;margin-top:4px">
+                                </div>
+                                <div>
+                                    <label style="font-size:0.9em;color:var(--muted)">Playback Mode</label>
+                                    <select id="quotesShuffle" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:6px;margin-top:4px">
+                                        <option value="false">In Order</option>
+                                        <option value="true">Shuffle</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <button onclick="saveQuotesSettings()" style="margin-top:10px;padding:8px 16px;background:var(--accent);color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600">Save Settings</button>
+                        </div>
+
+                        <!-- Add Quote Form -->
+                        <div style="background:#f9fafb;padding:12px;border-radius:8px;margin-bottom:12px">
+                            <h3 style="font-size:0.95em;font-weight:600;margin-bottom:8px">Add New Quote</h3>
+                            <div style="display:grid;gap:10px">
+                                <div>
+                                    <label style="font-size:0.9em;color:var(--muted)">Quote Text *</label>
+                                    <textarea id="quoteText" placeholder="Enter inspirational quote..." style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-family:inherit;min-height:80px;margin-top:4px"></textarea>
+                                </div>
+                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                                    <div>
+                                        <label style="font-size:0.9em;color:var(--muted)">Author</label>
+                                        <input id="quoteAuthor" type="text" placeholder="E.g., Albert Einstein" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px">
+                                    </div>
+                                    <div>
+                                        <label style="font-size:0.9em;color:var(--muted)">Background Image</label>
+                                        <select id="quoteBackground" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px">
+                                            <option value="">None (Black)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <button onclick="addQuote()" style="padding:10px 16px;background:var(--accent);color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600">Add Quote</button>
+                            </div>
+                        </div>
+
+                        <!-- Background Upload -->
+                        <div style="background:#f9fafb;padding:12px;border-radius:8px;margin-bottom:12px">
+                            <h3 style="font-size:0.95em;font-weight:600;margin-bottom:8px">Upload Background Image</h3>
+                            <div style="border:2px dashed #ddd;border-radius:8px;padding:16px;text-align:center;cursor:pointer" id="bgUploadArea">
+                                <div style="font-size:2em;margin-bottom:8px">📸</div>
+                                <div style="color:var(--muted);font-size:0.9em">Click or drag to upload (JPG, PNG, GIF, WebP)</div>
+                            </div>
+                            <input id="bgFileInput" type="file" accept="image/*" style="display:none">
+                        </div>
+
+                        <!-- Quotes List -->
+                        <div style="margin-top:12px">
+                            <h3 style="font-size:0.95em;font-weight:600;margin-bottom:8px">Quotes List</h3>
+                            <div id="quotesList" style="display:grid;gap:10px;max-height:400px;overflow-y:auto">
+                                <div class="muted">Loading quotes...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- small footer spacing -->
         <div style="height:18px"></div>
     </div>
@@ -1145,7 +1218,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
             const name = inp && inp.value && inp.value.trim();
             if(!name) return alert('Enter a playlist name');
             const fd = new FormData(); fd.append('name', name);
-            const res = await fetch('/api/playlists', {method:'POST', body: fd});
+            const res = await fetch('/api/playlists', {method:'POST', body: fd, credentials: 'same-origin'});
             const j = await res.json();
             if(!j.id) return alert(j.error||'Failed to create');
             alert('Created playlist '+name);
@@ -1330,7 +1403,242 @@ function renderSystemStats(stats){
 
     html += `<div class="stat-hostname">${stats.hostname || 'System'}</div>`;
     card.innerHTML = html;
-}
+    })();
+    
+    // ===== QUOTES MANAGEMENT =====
+    let editingQuoteId = null; // track quote being edited
+
+    async function loadQuotes() {
+        console.log('[loadQuotes] called');
+        try {
+            const res = await fetch('/api/quotes', { credentials: 'same-origin' });
+            console.log('quotes response status', res.status, res.headers.get('content-type'));
+            if (!res.ok) throw new Error('Failed to load quotes');
+            const data = await res.json();
+            
+            // Load settings
+            if (data.settings) {
+                document.getElementById('quotesDuration').value = data.settings.duration || 60;
+                document.getElementById('quotesShuffle').value = data.settings.shuffle ? 'true' : 'false';
+            }
+            
+            // Render quotes
+            const list = document.getElementById('quotesList');
+            if (!data.quotes || data.quotes.length === 0) {
+                list.innerHTML = '<div class="muted">No quotes yet. Add your first quote above!</div>';
+            } else {
+                list.innerHTML = data.quotes.map(q => `
+                    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px;display:flex;justify-content:space-between;align-items:start">
+                        <div style="flex:1;min-width:0">
+                            <div style="font-weight:600;margin-bottom:4px;word-break:break-word">"${q.text.substring(0, 60)}${q.text.length > 60 ? '...' : ''}"</div>
+                            <div style="color:var(--muted);font-size:0.9em">${q.author || 'Unknown'}</div>
+                            ${q.background ? `<div style="color:#667eea;font-size:0.85em;margin-top:4px">🖼️ ${q.background}</div>` : ''}
+                        </div>
+                        <div style="display:flex;gap:4px;flex-shrink:0">
+                            <button onclick="startEditQuote('${q.id}')" style="padding:4px 8px;background:#eef;color:#333;border:none;border-radius:4px;cursor:pointer;font-size:0.9em;white-space:nowrap">Edit</button>
+                            <button onclick="deleteQuote('${q.id}')" style="padding:4px 8px;background:#fee;color:#c41e3a;border:none;border-radius:4px;cursor:pointer;font-size:0.9em;white-space:nowrap">Delete</button>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        } catch (e) {
+            console.error('Failed to load quotes:', e);
+            document.getElementById('quotesList').innerHTML = '<div class="muted">Error loading quotes. See console.</div>';
+        }
+    }
+    
+    async function saveQuotesSettings() {
+        console.log('[saveQuotesSettings] starting');
+        try {
+            const duration = parseInt(document.getElementById('quotesDuration').value) || 60;
+            const shuffle = document.getElementById('quotesShuffle').value === 'true';
+            console.log('[saveQuotesSettings] duration=%s shuffle=%s', duration, shuffle);
+            
+            const formData = new FormData();
+            formData.append('duration', duration);
+            formData.append('shuffle', shuffle);
+            
+            const res = await fetch('/api/quotes/settings', { method: 'POST', body: formData, credentials: 'same-origin' });
+            if (!res.ok) throw new Error('Failed to save settings');
+            
+            const data = await res.json();
+            alert('Settings saved!');
+        } catch (e) {
+            alert('Error: ' + e.message);
+        }
+    }
+    
+    async function addQuote() {
+        console.log('[addQuote] starting');
+        const textEl = document.getElementById('quoteText');
+        const authorEl = document.getElementById('quoteAuthor');
+        const bgEl = document.getElementById('quoteBackground');
+        const text = textEl.value.trim();
+        const author = authorEl.value.trim();
+        const background = bgEl.value;
+        console.log('[addQuote] editing=%s text=%s author=%s', editingQuoteId, text.substring(0, 30), author);
+        
+        if (!text) {
+            alert('Please enter quote text');
+            return;
+        }
+        
+        try {
+            const formData = new FormData();
+            formData.append('text', text);
+            formData.append('author', author);
+            formData.append('background', background);
+            let url = '/api/quotes';
+            let method = 'POST';
+            if (editingQuoteId) {
+                url = `/api/quotes/${editingQuoteId}`;
+                method = 'PUT';
+            }
+            const res = await fetch(url, { method, body: formData, credentials: 'same-origin' });
+            if (!res.ok) throw new Error('Failed to ' + (editingQuoteId ? 'update' : 'add') + ' quote');
+            
+            textEl.value = '';
+            authorEl.value = '';
+            bgEl.value = '';
+            if (editingQuoteId) {
+                editingQuoteId = null;
+                if (quoteAddButton) quoteAddButton.textContent = 'Add Quote';
+            }
+            
+            alert(`Quote ${editingQuoteId ? 'updated' : 'added'}!`);
+            loadQuotes();
+        } catch (e) {
+            alert('Error: ' + e.message);
+        }
+    }
+    
+    function startEditQuote(id) {
+        console.log('[startEditQuote] id=%s', id);
+        // populate fields and switch to update mode
+        editingQuoteId = id;
+        // find quote in current list (we can reload quotes data)
+        fetch('/api/quotes', { credentials: 'same-origin' })
+            .then(r => r.json())
+            .then(data => {
+                const q = (data.quotes || []).find(q => q.id === id);
+                if (q) {
+                    document.getElementById('quoteText').value = q.text;
+                    document.getElementById('quoteAuthor').value = q.author || '';
+                    document.getElementById('quoteBackground').value = q.background || '';
+                    if (quoteAddButton) quoteAddButton.textContent = 'Save Quote';
+                }
+            }).catch(console.error);
+    }
+    
+    async function deleteQuote(quoteId) {
+        console.log('[deleteQuote] id=%s', quoteId);
+        if (!confirm('Delete this quote?')) return;
+        
+        try {
+            const res = await fetch(`/api/quotes/${quoteId}`, { method: 'DELETE', credentials: 'same-origin' });
+            if (!res.ok) throw new Error('Failed to delete quote');
+            
+            alert('Quote deleted!');
+            loadQuotes();
+        } catch (e) {
+            alert('Error: ' + e.message);
+        }
+    }
+    
+    // Background upload handler - set up when DOM ready
+    function setupBackgroundUpload() {
+        const bgUploadArea = document.getElementById('bgUploadArea');
+        const bgFileInput = document.getElementById('bgFileInput');
+        if (!bgUploadArea || !bgFileInput) {
+            console.warn('bgUploadArea or bgFileInput not found');
+            return;
+        }
+        
+        bgUploadArea.addEventListener('click', () => {
+            bgFileInput.click();
+        });
+        
+        bgFileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                const res = await fetch('/upload_quote_background', { method: 'POST', body: formData, credentials: 'same-origin' });
+                if (!res.ok) throw new Error('Upload failed');
+                
+                const data = await res.json();
+                if (data.ok) {
+                    alert('Background uploaded!');
+                    loadQuotesBackgrounds();
+                    loadQuotes();
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        });
+        
+        // drag-drop events
+        ['dragenter','dragover'].forEach(evt => {
+            bgUploadArea.addEventListener(evt, e => { e.preventDefault(); bgUploadArea.classList.add('dragover'); });
+        });
+        ['dragleave','drop'].forEach(evt => {
+            bgUploadArea.addEventListener(evt, e => { e.preventDefault(); bgUploadArea.classList.remove('dragover'); });
+        });
+        bgUploadArea.addEventListener('drop', e => {
+            if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+                bgFileInput.files = e.dataTransfer.files;
+                const ev = new Event('change');
+                bgFileInput.dispatchEvent(ev);
+            }
+        });
+    }
+    
+    async function loadQuotesBackgrounds() {
+        try {
+            const bgSelect = document.getElementById('quoteBackground');
+            // fetch all uploaded background filenames
+            const res = await fetch('/api/quote_backgrounds', { credentials: 'same-origin' });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.ok && Array.isArray(data.files)) {
+                    bgSelect.innerHTML = '<option value="">None (Black)</option>' + 
+                        data.files.map(bg => `<option value="${bg}">${bg}</option>`).join('');
+                    return;
+                }
+            }
+            // fallback: load from quotes only (older behavior)
+            const res2 = await fetch('/api/quotes', { credentials: 'same-origin' });
+            const data2 = await res2.json();
+            if (data2.quotes && data2.quotes.length > 0) {
+                const usedBgs = new Set(data2.quotes.map(q => q.background).filter(b => b));
+                const allBgs = Array.from(usedBgs);
+                bgSelect.innerHTML = '<option value="">None (Black)</option>' + 
+                    allBgs.map(bg => `<option value="${bg}">${bg}</option>`).join('');
+            }
+        } catch (e) {
+            console.error('Failed to load backgrounds:', e);
+        }
+    }
+    
+    // Load quotes on page load
+    document.addEventListener('DOMContentLoaded', () => {
+        console.log('[DOMContentLoaded] setting up quotes');
+        loadQuotes();
+        loadQuotesBackgrounds();
+        setupBackgroundUpload();
+    });
+    
+    // Ensure global scope for onclick handlers
+    if (typeof window !== 'undefined') {
+        window.addQuote = addQuote;
+        window.deleteQuote = deleteQuote;
+        window.loadQuotes = loadQuotes;
+        window.startEditQuote = startEditQuote;
+    }
+
 
 // Toggle stats card visibility
 function toggleStatsCard() {

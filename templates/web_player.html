@@ -161,6 +161,104 @@
         }
         #switch-playlist-btn:hover { background: rgba(255,255,255,0.18); }
         #switch-playlist-btn.hidden-controls { opacity: 0; pointer-events: none; }
+        
+        /* Quotes button - distinct styling */
+        #quotes-btn {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            padding: 20px 40px;
+            border: none;
+            border-radius: 50px;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: #fff;
+            font-weight: 900;
+            font-size: 1.3em;
+            cursor: pointer;
+            box-shadow: 0 10px 30px rgba(240, 147, 251, 0.4);
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        #quotes-btn:hover {
+            transform: translateX(-50%) translateY(-3px);
+            box-shadow: 0 15px 40px rgba(240, 147, 251, 0.6);
+        }
+        #quotes-btn.hidden { display: none !important; }
+        
+        /* Quote slide display */
+        #quote-display {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+            z-index: 10;
+        }
+        
+        #quote-display.with-background {
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+        }
+        
+        #quote-display::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1;
+        }
+        
+        .quote-content {
+            position: relative;
+            z-index: 2;
+            max-width: 80%;
+            text-align: center;
+            padding: 60px;
+        }
+        
+        .quote-text {
+            font-size: 3.5em;
+            font-weight: 700;
+            line-height: 1.4;
+            color: #fff;
+            text-shadow: 0 4px 20px rgba(0, 0, 0, 0.8);
+            margin-bottom: 30px;
+            font-style: italic;
+        }
+        
+        .quote-text::before {
+            content: '"';
+            font-size: 1.5em;
+            opacity: 0.7;
+        }
+        
+        .quote-text::after {
+            content: '"';
+            font-size: 1.5em;
+            opacity: 0.7;
+        }
+        
+        .quote-author {
+            font-size: 2em;
+            font-weight: 600;
+            color: #fbbf24;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
+        }
+        
+        .quote-author::before {
+            content: '— ';
+        }
     </style>
 </head>
 <body>
@@ -169,6 +267,7 @@
         <h1>🖥️ Litmus Signage Player</h1>
         <div class="subtitle">Select a playlist to play on this screen</div>
         <div id="playlist-grid"></div>
+        <button id="quotes-btn">✨ Inspirational Quotes</button>
         <div id="deeplink-info">Tip: Use ?playlist_id=&lt;id&gt; to deep-link to a specific playlist</div>
     </div>
     
@@ -179,6 +278,12 @@
         <img id="image-player" class="hidden">
         <div id="youtube-container" class="hidden">
             <iframe id="youtube-player" style="width:100%;height:100%;border:none;" allow="autoplay"></iframe>
+        </div>
+        <div id="quote-display" class="hidden">
+            <div class="quote-content">
+                <div class="quote-text"></div>
+                <div class="quote-author"></div>
+            </div>
         </div>
     </div>
 
@@ -191,17 +296,22 @@
     <script src="https://www.youtube.com/iframe_api"></script>
 
     <script>
-        console.log('Web Player v2.0 - Per-Client Playlist Selection');
+        console.log('Web Player v2.1 - With Inspirational Quotes');
         
         // ===== PLAYLIST SELECTION =====
         const STORAGE_KEY = 'signage.selected_playlist_id';
+        const QUOTES_STORAGE_KEY = 'signage.quotes_mode';
         const playlistSelection = document.getElementById('playlist-selection');
         const playlistGrid = document.getElementById('playlist-grid');
         const playerContainer = document.getElementById('player-container');
+        const quotesBtn = document.getElementById('quotes-btn');
+        const quoteDisplay = document.getElementById('quote-display');
         
         let selectedPlaylistId = null;
-        let selectedSource = null; // 'url' | 'localStorage' | 'server-active' | null
+        let selectedSource = null; // 'url' | 'localStorage' | 'server-active' | 'quotes' | null
         let availablePlaylists = [];
+        let quotesMode = false;
+        let quotesData = null;
         
         // Check for URL parameter ?playlist_id=xxx
         const urlParams = new URLSearchParams(window.location.search);
@@ -281,11 +391,13 @@
         function selectPlaylist(playlistId) {
             console.log('Playlist selected:', playlistId);
             selectedPlaylistId = playlistId;
+            quotesMode = false;
             
             // Persist to localStorage (unless it's a URL override)
             if (!activeUrlPlaylistId) {
                 try {
                     localStorage.setItem(STORAGE_KEY, playlistId);
+                    localStorage.removeItem(QUOTES_STORAGE_KEY);
                     console.log('Saved to localStorage');
                 } catch (e) {
                     console.warn('Failed to save to localStorage:', e);
@@ -295,10 +407,26 @@
             renderPlaylistCards();
             startPlayback();
         }
+        
+        // Quotes button handler
+        quotesBtn.onclick = () => {
+            console.log('Quotes mode selected');
+            quotesMode = true;
+            selectedPlaylistId = null;
+            selectedSource = 'quotes';
+            
+            try {
+                localStorage.setItem(QUOTES_STORAGE_KEY, 'true');
+                localStorage.removeItem(STORAGE_KEY);
+            } catch (e) {}
+            
+            startQuotesPlayback();
+        };
 
         function resetSelection(clearUrl = true) {
             console.log('Resetting selection to show chooser');
             stopPlayer();
+            quotesMode = false;
             document.body.classList.remove('playing');
             playerContainer.classList.add('hidden');
             playlistSelection.classList.remove('hidden');
@@ -310,6 +438,7 @@
             playlistHash = null;
             try {
                 localStorage.removeItem(STORAGE_KEY);
+                localStorage.removeItem(QUOTES_STORAGE_KEY);
             } catch (e) {}
             if (clearUrl && activeUrlPlaylistId) {
                 // remove playlist_id from URL so reload won't reapply deep link
@@ -347,6 +476,105 @@
             
             // Start player loop
             startPlayer();
+        }
+        
+        // ===== QUOTES PLAYBACK =====
+        let quotesInterval = null;
+        let currentQuoteIndex = 0;
+        let quotesArray = [];
+        
+        async function startQuotesPlayback() {
+            console.log('Starting quotes playback');
+            
+            try {
+                const res = await fetch('/api/quotes');
+                if (!res.ok) throw new Error('Failed to fetch quotes');
+                quotesData = await res.json();
+                
+                if (!quotesData.quotes || quotesData.quotes.length === 0) {
+                    alert('No quotes available. Please add quotes in the dashboard first.');
+                    resetSelection();
+                    return;
+                }
+                
+                // Prepare quotes array
+                quotesArray = [...quotesData.quotes];
+                if (quotesData.settings.shuffle) {
+                    // Shuffle array
+                    for (let i = quotesArray.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [quotesArray[i], quotesArray[j]] = [quotesArray[j], quotesArray[i]];
+                    }
+                }
+                
+                // Hide selection screen, show player
+                playlistSelection.classList.add('hidden');
+                playerContainer.classList.remove('hidden');
+                document.body.classList.add('playing');
+                switchBtn.classList.remove('hidden');
+                
+                // Initialize cursor/controls auto-hide
+                initAutoHideControls();
+                
+                // Try fullscreen
+                try {
+                    const elem = document.documentElement;
+                    if (elem.requestFullscreen) {
+                        elem.requestFullscreen().catch(e => console.log('Fullscreen denied'));
+                    } else if (elem.webkitRequestFullscreen) {
+                        elem.webkitRequestFullscreen();
+                    }
+                } catch (e) {
+                    console.log('Fullscreen not available:', e);
+                }
+                
+                currentQuoteIndex = 0;
+                showQuote();
+                
+            } catch (error) {
+                console.error('Error loading quotes:', error);
+                alert('Failed to load quotes. Please check the console.');
+                resetSelection();
+            }
+        }
+        
+        function showQuote() {
+            if (!quotesArray || quotesArray.length === 0) return;
+            
+            const quote = quotesArray[currentQuoteIndex];
+            const quoteText = document.querySelector('.quote-text');
+            const quoteAuthor = document.querySelector('.quote-author');
+            
+            // Set content
+            quoteText.textContent = quote.text || '';
+            quoteAuthor.textContent = quote.author || '';
+            
+            // Set background if available
+            if (quote.background) {
+                quoteDisplay.style.backgroundImage = `url(/content/quote_backgrounds/${quote.background})`;
+                quoteDisplay.classList.add('with-background');
+            } else {
+                quoteDisplay.style.backgroundImage = '';
+                quoteDisplay.classList.remove('with-background');
+            }
+            
+            // Show quote display, hide other players
+            videoPlayer.classList.add('hidden');
+            imagePlayer.classList.add('hidden');
+            youtubeContainer.classList.add('hidden');
+            quoteDisplay.classList.remove('hidden');
+            
+            // Schedule next quote
+            const duration = (quotesData.settings.duration || 60) * 1000;
+            if (quotesInterval) clearTimeout(quotesInterval);
+            quotesInterval = setTimeout(nextQuote, duration);
+            
+            console.log(`Showing quote ${currentQuoteIndex + 1}/${quotesArray.length} for ${duration/1000}s`);
+        }
+        
+        function nextQuote() {
+            currentQuoteIndex = (currentQuoteIndex + 1) % quotesArray.length;
+            showQuote();
         }
         
         function escapeHtml(text) {
@@ -422,6 +650,12 @@
             playlist = [];
             currentIndex = 0;
             playlistHash = null;
+            
+            // Cleanup quotes
+            if (quotesInterval) {
+                clearTimeout(quotesInterval);
+                quotesInterval = null;
+            }
         }
         
         async function fetchPlaylist() {

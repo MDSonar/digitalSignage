@@ -29,6 +29,8 @@ PLAYLISTS_DIR = Path.home() / 'signage' / 'playlists'
 VIDEOS_DIR = Path.home() / 'signage' / 'content' / 'videos'
 PRESENTATIONS_DIR = Path.home() / 'signage' / 'content' / 'presentations'
 SLIDES_CACHE_DIR = Path.home() / 'signage' / 'cache' / 'slides'
+QUOTES_FILE = Path.home() / 'signage' / 'quotes.json'
+QUOTE_BACKGROUNDS_DIR = Path.home() / 'signage' / 'content' / 'quote_backgrounds'
 VIDEO_FORMATS = ['.mp4', '.avi', '.mov', '.mkv', '.webm']
 SLIDE_DURATION = 10
 
@@ -352,6 +354,21 @@ def serve_video(filename):
 @app.route('/content/slides/<path:filename>')
 def serve_slide(filename):
     return send_from_directory(SLIDES_CACHE_DIR, filename)
+
+@app.route('/content/quote_backgrounds/<path:filename>')
+def serve_quote_background(filename):
+    return send_from_directory(QUOTE_BACKGROUNDS_DIR, filename)
+
+@app.route('/api/quotes')
+def api_quotes():
+    """Return quotes data for web player"""
+    try:
+        if QUOTES_FILE.exists():
+            return jsonify(json.loads(QUOTES_FILE.read_text()))
+        return jsonify({'quotes': [], 'settings': {'duration': 60, 'shuffle': False}})
+    except Exception:
+        logger.exception('Failed to read quotes')
+        return jsonify({'quotes': [], 'settings': {'duration': 60, 'shuffle': False}})
 
 if __name__ == '__main__':
     logger.info("=" * 60)
