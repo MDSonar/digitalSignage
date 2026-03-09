@@ -1,0 +1,28 @@
+# Docker Compose Override for Development
+# This file is automatically loaded by docker-compose
+# Use this for local development with hot-reload
+
+version: '3.8'
+
+services:
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      # Mount source code for hot-reload
+      - ./dashboard.py:/app/dashboard.py
+      - ./templates:/app/templates
+    environment:
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+    command: python dashboard.py
+
+  web-player:
+    volumes:
+      # Mount source code for hot-reload
+      - ./web_player.py:/app/web_player.py
+      - ./templates:/app/templates
+    environment:
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1

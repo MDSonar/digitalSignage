@@ -62,8 +62,12 @@
         .user-info{font-size:0.85rem;opacity:0.95}
         .logout-btn{background:rgba(255,255,255,0.12);color:white;padding:8px 12px;border-radius:10px;text-decoration:none;font-weight:700;border:1px solid rgba(255,255,255,0.06)}
 
-        /* Content grid */
-        .content{display:grid;grid-template-columns: 360px 1fr;gap:18px;padding:18px}
+        /* Content - single column layout */
+        .content{display:flex;flex-direction:column;gap:18px;padding:18px;max-width:900px;margin:0 auto}
+
+        /* Progress bars */
+        .progress-wrap{position:relative;height:3px;background:rgba(15,23,42,0.08);overflow:hidden;margin-bottom:8px}
+        .progress{height:100%;background:linear-gradient(90deg,#10b981,#34d399);transition:width .3s ease;border-radius:0}
 
         /* Top-level card style */
         .card{background:var(--card);border-radius:10px;padding:14px;border:1px solid rgba(15,23,42,0.04);transition:transform .18s var(--easing), box-shadow .18s var(--easing)}
@@ -106,6 +110,7 @@
         .file-badge{font-size:0.75rem;padding:6px 8px;border-radius:8px;background:rgba(0,0,0,0.04);color:var(--muted);font-weight:700}
         .badge-pptx{background:#fff7ed;color:#7c2d12}
         .badge-pdf{background:#fff1f2;color:#7f1d1d}
+        .badge-youtube{background:#fff0f0;color:#c41e3a;border:1px solid rgba(196,30,58,0.1)}
 
         /* Upload area (styled file input as drop area) */
         .drop-area{display:flex;align-items:center;justify-content:center;gap:10px;padding:12px;border-radius:10px;border:2px dashed rgba(86,99,235,0.08);background:linear-gradient(180deg, rgba(86,99,235,0.03), rgba(86,99,235,0.01));cursor:pointer;color:var(--muted);font-weight:700;text-align:center}
@@ -356,147 +361,78 @@
                 <h1>🖥️ Litmus Signage Dashboard</h1>
                 <div class="user-info">Logged in as: {{ username }}</div>
             </div>
+            <!-- Player controls in header -->
+            <form action="{{ url_for('send_command') }}" method="POST" class="control-form" aria-label="Player controls" style="display:flex;gap:8px;align-items:center">
+                <input type="hidden" name="target" value="web">
+                <button class="icon-btn ghost" aria-label="Previous" name="action" value="prev" title="Previous" type="submit" style="color:white;padding:6px">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M11.5 12L20 18V6L11.5 12Z" fill="currentColor" /><path d="M4 18V6L9.5 12L4 18Z" fill="currentColor" /></svg>
+                </button>
+                <button class="icon-btn" aria-label="Play" name="action" value="play" title="Play" type="submit" style="color:white;padding:6px">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M8 5v14l11-7L8 5z" /></svg>
+                </button>
+                <button class="icon-btn pause" aria-label="Pause" name="action" value="pause" title="Pause" type="submit" style="color:white;padding:6px">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="6" y="5" width="4" height="14" fill="currentColor" /><rect x="14" y="5" width="4" height="14" fill="currentColor" /></svg>
+                </button>
+                <button class="icon-btn ghost" aria-label="Next" name="action" value="next" title="Next" type="submit" style="color:white;padding:6px">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M3 6v12l9-6-9-6z" fill="currentColor" /><path d="M12 6v12l9-6-9-6z" fill="currentColor" /></svg>
+                </button>
+            </form>
             <a href="{{ url_for('logout') }}" class="logout-btn" aria-label="Logout">Logout</a>
         </header>
 
-        <!-- top progress bar -->
-        <div class="progress-wrap" aria-hidden="true">
-            <div id="topProgress" class="progress" style="width:0%"></div>
+        <!-- Flash messages under header -->
+        <div class="flash-wrap" aria-live="polite" style="padding:12px 18px;padding-bottom:0">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="flash {{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
         </div>
 
         <div class="content" role="main">
-            <!-- Left column: Player controls and mode -->
-            <div class="card">
-                <div class="section-header"><h2>⚙️ Player Control</h2></div>
-
-                <!-- Flash messages -->
-                <div class="flash-wrap" aria-live="polite">
-                    {% with messages = get_flashed_messages(with_categories=true) %}
-                        {% if messages %}
-                            {% for category, message in messages %}
-                                <div class="flash {{ category }}">{{ message }}</div>
-                            {% endfor %}
-                        {% endif %}
-                    {% endwith %}
-                </div>
-
-                <div class="controls">
-                    <!-- Mode form (must keep action and method intact) -->
-                    <form action="{{ url_for('set_mode') }}" method="POST" class="control-block" id="modeForm" aria-label="Player mode form">
-                        <div class="section-header" style="margin-bottom:6px">
-                            <h2>Player Mode</h2>
-                            <div class="section-sub">Choose content to play</div>
-                        </div>
-
-                        <div class="mode-wrap">
-                            <!-- Visual segmented slider (JS will update hidden input named 'mode') -->
-                            <div class="segmented" id="segmented" role="tablist" aria-label="Player mode">
-                                <div class="slider-knob" id="sliderKnob" aria-hidden="true"></div>
-                                <button type="button" role="tab" aria-pressed="false" data-value="video">Video</button>
-                                <button type="button" role="tab" aria-pressed="false" data-value="presentation">Presentation</button>
-                                <button type="button" role="tab" aria-pressed="false" data-value="both">Both</button>
-                            </div>
-
-                            <!-- Hidden input to preserve server-side name 'mode' -->
-                            <input type="hidden" name="mode" id="modeInput" value="{{ mode|default('both') }}">
-                        </div>
-
-                        <div style="margin-top:8px">
-                            <button type="submit" class="save-mode-btn" aria-label="Save player mode">Save Mode</button>
-                        </div>
-                    </form>
-
-                    <hr style="border:none;height:8px" />
-
-                    <!-- Web Player Controls -->
-                    <div class="control-block" aria-label="Web player controls">
-                        <div class="section-header"><h2>Web Player Controls</h2></div>
-                        <div class="control-row">
-                            <form action="{{ url_for('send_command') }}" method="POST" class="control-form" aria-label="Web player command form">
-                                <input type="hidden" name="target" value="web">
-                                <button class="icon-btn ghost" aria-label="Previous" name="action" value="prev" title="Previous" type="submit">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                                        <path d="M11.5 12L20 18V6L11.5 12Z" fill="currentColor" />
-                                        <path d="M4 18V6L9.5 12L4 18Z" fill="currentColor" />
-                                    </svg>
-                                </button>
-                                <button class="icon-btn" aria-label="Play" name="action" value="play" title="Play" type="submit">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                                        <path d="M8 5v14l11-7L8 5z" />
-                                    </svg>
-                                </button>
-                                <button class="icon-btn pause" aria-label="Pause" name="action" value="pause" title="Pause" type="submit">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                                        <rect x="6" y="5" width="4" height="14" fill="currentColor" />
-                                        <rect x="14" y="5" width="4" height="14" fill="currentColor" />
-                                    </svg>
-                                </button>
-                                <button class="icon-btn ghost" aria-label="Next" name="action" value="next" title="Next" type="submit">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                                        <path d="M3 6v12l9-6-9-6z" fill="currentColor" />
-                                        <path d="M12 6v12l9-6-9-6z" fill="currentColor" />
-                                    </svg>
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-
-                    <!-- Signage (HDMI) Controls -->
-                    <div class="control-block" aria-label="Signage controls">
-                        <div class="section-header"><h2>Signage (HDMI) Controls</h2></div>
-                        <div class="control-row">
-                            <form action="{{ url_for('send_command') }}" method="POST" class="control-form" aria-label="Signage command form">
-                                <input type="hidden" name="target" value="signage">
-                                <button class="icon-btn ghost" aria-label="Previous signage" name="action" value="prev" title="Previous" type="submit">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                                        <path d="M11.5 12L20 18V6L11.5 12Z" fill="currentColor" />
-                                        <path d="M4 18V6L9.5 12L4 18Z" fill="currentColor" />
-                                    </svg>
-                                </button>
-                                <button class="icon-btn" aria-label="Play signage" name="action" value="play" title="Play" type="submit">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                                        <path d="M8 5v14l11-7L8 5z" />
-                                    </svg>
-                                </button>
-                                <button class="icon-btn pause" aria-label="Pause signage" name="action" value="pause" title="Pause" type="submit">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                                        <rect x="6" y="5" width="4" height="14" fill="currentColor" />
-                                        <rect x="14" y="5" width="4" height="14" fill="currentColor" />
-                                    </svg>
-                                </button>
-                                <button class="icon-btn ghost" aria-label="Next signage" name="action" value="next" title="Next" type="submit">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                                        <path d="M3 6v12l9-6-9-6z" fill="currentColor" />
-                                        <path d="M12 6v12l9-6-9-6z" fill="currentColor" />
-                                    </svg>
-                                </button>
-                            </form>
-                        </div>
+                <!-- Playlists manager (multi-playlist) -->
+                <div class="card" aria-labelledby="playlistsHeading" style="margin-bottom:12px">
+                    <div class="section-header"><h2 id="playlistsHeading">📂 Playlists</h2></div>
+                    <div class="muted" style="margin-bottom:8px">Create, edit, or delete playlists. Web players choose their own playlist independently.</div>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                        <select id="playlistSelector" style="padding:8px;border-radius:8px;border:1px solid rgba(15,23,42,0.08)"></select>
+                        <button id="editPlaylistBtn" class="save-mode-btn" style="background:linear-gradient(90deg,#10b981,#34d399)">Edit</button>
+                        <input id="newPlaylistName" placeholder="New playlist name" style="padding:8px;border-radius:8px;border:1px solid rgba(15,23,42,0.08)" />
+                        <button id="createPlaylistBtn" class="save-mode-btn">Create</button>
+                        <button id="duplicatePlaylistBtn" class="save-mode-btn" style="background:linear-gradient(90deg,#64748b,#334155)">Duplicate</button>
+                        <button id="renamePlaylistBtn" class="save-mode-btn" style="background:linear-gradient(90deg,#f59e0b,#f97316)">Rename</button>
+                        <button id="deletePlaylistBtn" class="delete-btn" style="padding:8px 12px">Delete</button>
+                        <div id="currentEditingBadge" class="file-badge" style="margin-left:auto"></div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Right column: Uploads and lists -->
-            <div>
                 <!-- Playlist panel -->
                 <div class="card" aria-labelledby="playlistHeading" style="margin-bottom:12px">
-                    <div class="section-header"><h2 id="playlistHeading">🎵 Playlist (Ordered)</h2></div>
-                    <div style="margin-bottom:8px;color:var(--muted);font-size:0.92rem">Drag to reorder. Set "Repeat" to play an item consecutively.</div>
+                    <div class="section-header"><h2 id="playlistHeading">🎵 Playlist Editor <span id="activeNameTag" class="file-badge" style="margin-left:8px"></span></h2></div>
+                    <div style="margin-bottom:8px;color:var(--muted);font-size:0.92rem">Drag to reorder. Set "Repeat" to play an item consecutively. Changes save to the selected playlist.</div>
                     <div id="playlistPanel">
                         <ul id="playlistList" style="list-style:none;display:flex;flex-direction:column;gap:8px;padding:0;margin:0">
-                            <li class="file-item muted">Loading playlist…</li>
+                            <li class="file-item muted">Select a playlist to edit…</li>
                         </ul>
                         <div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end">
-                            <button id="savePlaylistOrder" class="save-mode-btn">Save Order</button>
+                            <button id="savePlaylistOrder" class="save-mode-btn">Save Playist</button>
                         </div>
                     </div>
                 </div>
+
+                <!-- Video Upload Progress Bar -->
+                <div class="progress-wrap" aria-hidden="true" id="videoProgressWrap" style="display:none">
+                    <div id="videoProgress" class="progress" style="width:0%"></div>
+                </div>
+
                 <!-- Videos card -->
                 <div class="card" aria-labelledby="videosHeading" style="margin-bottom:12px">
                     <div class="section-header"><h2 id="videosHeading">📹 Videos</h2></div>
 
                     <div class="upload-form" style="display:flex;flex-direction:column;gap:10px">
-                        <form action="{{ url_for('upload_file', content_type='video') }}" method="POST" enctype="multipart/form-data" class="uploadForm" aria-label="Upload video form">
+                        <form action="{{ url_for('upload_chunk', content_type='video') }}" method="POST" enctype="multipart/form-data" class="uploadForm" aria-label="Upload video form">
                             <!-- Drop area styled label -->
                             <label class="drop-area" for="videoFile" tabindex="0" aria-label="Upload a video">
                                 <div class="drop-default">
@@ -545,12 +481,17 @@
                     </div>
                 </div>
 
+                <!-- Presentation Upload Progress Bar -->
+                <div class="progress-wrap" aria-hidden="true" id="presentationProgressWrap" style="display:none">
+                    <div id="presentationProgress" class="progress" style="width:0%"></div>
+                </div>
+
                 <!-- Presentations card -->
                 <div class="card" aria-labelledby="presentationsHeading">
                     <div class="section-header"><h2 id="presentationsHeading">📊 Presentations</h2></div>
 
                     <div class="upload-form" style="display:flex;flex-direction:column;gap:10px">
-                        <form action="{{ url_for('upload_file', content_type='presentation') }}" method="POST" enctype="multipart/form-data" class="uploadForm" aria-label="Upload presentation form">
+                        <form action="{{ url_for('upload_chunk', content_type='presentation') }}" method="POST" enctype="multipart/form-data" class="uploadForm" aria-label="Upload presentation form">
                             <label class="drop-area" for="presentationFile" tabindex="0" aria-label="Upload a presentation">
                                 <div class="drop-default">
                                     <strong>Drag & drop or click to browse</strong>
@@ -602,6 +543,99 @@
                         {% endif %}
                     </div>
                 </div>
+
+                <!-- YouTube Card (Add + Links merged) -->
+                <div class="card" aria-labelledby="youtubeHeading" style="margin-bottom:12px">
+                    <div class="section-header"><h2 id="youtubeHeading">🎬 YouTube Videos</h2></div>
+
+                    <!-- Add YouTube Form -->
+                    <div class="upload-form" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid rgba(15,23,42,0.08)">
+                        <form action="{{ url_for('add_youtube_link') }}" method="POST" aria-label="Add YouTube link form">
+                            
+                            <div style="display:flex;flex-direction:column;gap:10px">
+                                <div style="display:flex;flex-direction:column;gap:6px">
+                                    <label for="youtube_url" style="font-weight:600;color:var(--text);font-size:0.9rem">YouTube URL *</label>
+                                    <input 
+                                        type="url" 
+                                        id="youtube_url"
+                                        name="youtube_url" 
+                                        placeholder="https://www.youtube.com/watch?v=..." 
+                                        required 
+                                        style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(15,23,42,0.12);font-size:0.95rem;transition:border-color 0.2s"
+                                        onfocus="this.style.borderColor='var(--accent)'"
+                                        onblur="this.style.borderColor='rgba(15,23,42,0.12)'"
+                                    />
+                                    <small style="color:var(--muted);font-size:0.85rem">Paste a YouTube video link (e.g., youtube.com/watch?v=... or youtu.be/...)</small>
+                                </div>
+
+                                <div style="display:flex;flex-direction:column;gap:6px">
+                                    <label for="youtube_name" style="font-weight:600;color:var(--text);font-size:0.9rem">Display Name (Optional)</label>
+                                    <input 
+                                        type="text" 
+                                        id="youtube_name"
+                                        name="youtube_name" 
+                                        placeholder="My Video Title" 
+                                        style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(15,23,42,0.12);font-size:0.95rem;transition:border-color 0.2s"
+                                        onfocus="this.style.borderColor='var(--accent)'"
+                                        onblur="this.style.borderColor='rgba(15,23,42,0.12)'"
+                                    />
+                                    <small style="color:var(--muted);font-size:0.85rem">Leave blank to use the URL as the name</small>
+                                </div>
+                            </div>
+
+                            <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:6px">
+                                <button type="submit" class="save-mode-btn" aria-label="Add YouTube video">Add Video</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- YouTube Links List -->
+                    <div style="margin-bottom:8px;color:var(--muted);font-size:0.88rem;font-weight:600">Your YouTube Videos</div>
+                    <div class="files-list">
+                        {% if youtube_links %}
+                            {% for yt in youtube_links %}
+                                <div class="file-item" role="listitem">
+                                    <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
+                                        
+                                        <!-- Checkbox: consistent with video card -->
+                                        <input
+                                            type="checkbox"
+                                            class="playlist-checkbox"
+                                            data-filename="{{ yt.url }}"
+                                            data-content-type="youtube"
+                                            {% if yt.in_playlist %}checked{% endif %}
+                                            aria-label="Add {{ yt.name }} to playlist"
+                                        >
+
+                                        <!-- Info block -->
+                                        <div class="file-info">
+                                            <div class="file-name">{{ yt.name }}</div>
+                                            <div class="file-size">{{ yt.url }}</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="file-actions">
+                                        <!-- Badge (always YT) -->
+                                        <span class="file-badge badge-youtube">YOUTUBE</span>
+
+                                        <!-- Delete button -->
+                                        <form class="delete-form"
+                                            action="{{ url_for('delete_youtube_link') }}"
+                                            method="POST"
+                                            onsubmit="return confirm('Delete {{ yt.name }}?')">
+                                            <input type="hidden" name="url" value="{{ yt.url }}">
+                                            <button type="submit" class="delete-btn" aria-label="Delete {{ yt.name }}">Delete</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="file-item" style="justify-content:center">
+                                <div class="muted">No YouTube links added yet</div>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -612,67 +646,7 @@
 
 <script>
     (function(){
-        // Segmented slider logic
-        const segmented = document.getElementById('segmented');
-        const buttons = Array.from(segmented.querySelectorAll('button'));
-        const knob = document.getElementById('sliderKnob');
-        const modeInput = document.getElementById('modeInput');
-
-        // Map button index to value
-        const values = buttons.map(b => b.dataset.value);
-
-        // Initialize selected from server-side value
-        let initial = (modeInput.value || 'both').toLowerCase();
-        let selectedIndex = Math.max(0, values.indexOf(initial));
-        if (selectedIndex === -1) selectedIndex = 2;
-
-        function updateUI(index, animate=true){
-            // update aria-pressed
-            buttons.forEach((b,i)=> b.setAttribute('aria-pressed', i===index ? 'true' : 'false'));
-            // place knob
-            const total = buttons.length;
-            const segmentWidth = 100 / total;
-            const leftPercent = 4 + index * (segmentWidth); // small padding compensation
-            knob.style.left = `calc(${index * (100/total)}% + 4px)`;
-            // update hidden input
-            modeInput.value = values[index];
-        }
-
-        // Click handlers
-        buttons.forEach((b, i) => {
-            b.addEventListener('click', () => updateUI(i));
-            b.addEventListener('keydown', (e) => {
-                if (e.key === 'ArrowLeft') updateUI(Math.max(0, i-1));
-                if (e.key === 'ArrowRight') updateUI(Math.min(buttons.length-1, i+1));
-            });
-        });
-
-        // Drag support for knob (lightweight)
-        (function addDrag(){
-            let dragging = false;
-            let startX = 0;
-            knob.addEventListener('pointerdown', (ev) => {
-                ev.preventDefault();
-                dragging = true;
-                startX = ev.clientX;
-                knob.setPointerCapture(ev.pointerId);
-            });
-            window.addEventListener('pointermove', (ev) => {
-                if (!dragging) return;
-                const rect = segmented.getBoundingClientRect();
-                const relX = ev.clientX - rect.left;
-                let pct = Math.max(0, Math.min(1, relX / rect.width));
-                const idx = Math.round(pct * (buttons.length - 1));
-                updateUI(idx);
-            });
-            window.addEventListener('pointerup', (ev) => { dragging = false; });
-        })();
-
-        // Set initial UI
-        updateUI(selectedIndex);
-
-        // Make segmented collapse to buttons on tiny screens by CSS fallback (JS not needed)
-
+        
         // File input drop areas: improve UX (keep functionality) and show selected filename
         const dropAreas = document.querySelectorAll('.drop-area');
         function formatBytes(bytes) {
@@ -802,30 +776,50 @@
         });
 
         // Progress bar animation on file upload forms (UI-only, lightweight)
-        const topProgress = document.getElementById('topProgress');
+        const videoProgress = document.getElementById('videoProgress');
+        const videoProgressWrap = document.getElementById('videoProgressWrap');
+        const presentationProgress = document.getElementById('presentationProgress');
+        const presentationProgressWrap = document.getElementById('presentationProgressWrap');
+        
         const uploadForms = document.querySelectorAll('form.uploadForm');
         uploadForms.forEach(form => {
             form.addEventListener('submit', (e) => {
-                topProgress.style.width = '6%';
-                topProgress.style.transition = 'width 300ms linear';
-                setTimeout(()=> topProgress.style.width = '30%', 120);
-                setTimeout(()=> topProgress.style.width = '55%', 700);
-                setTimeout(()=> topProgress.style.width = '78%', 1400);
-                setTimeout(()=> topProgress.style.width = '98%', 5000);
+                const action = form.getAttribute('action') || '';
+                const input = form.querySelector('input[type="file"]');
+                
+                // Determine which progress bar to use based on content type
+                let progressBar, progressWrap;
+                if (action.indexOf('/upload/presentation') !== -1 || (input && input.accept && input.accept.indexOf('.ppt') !== -1)) {
+                    progressBar = presentationProgress;
+                    progressWrap = presentationProgressWrap;
+                } else {
+                    progressBar = videoProgress;
+                    progressWrap = videoProgressWrap;
+                }
+                
+                if (progressBar && progressWrap) {
+                    progressWrap.style.display = 'block';
+                    progressBar.style.width = '6%';
+                    progressBar.style.transition = 'width 300ms linear';
+                    setTimeout(()=> progressBar.style.width = '30%', 120);
+                    setTimeout(()=> progressBar.style.width = '55%', 700);
+                    setTimeout(()=> progressBar.style.width = '78%', 1400);
+                    setTimeout(()=> progressBar.style.width = '98%', 5000);
+                }
             });
         });
 
-        // On page load, animate progress to 100% then hide
+        // On page load, hide progress bars
         window.addEventListener('pageshow', () => {
-            setTimeout(()=> { topProgress.style.width = '100%'; setTimeout(()=> { topProgress.style.width = '0%'; }, 300); }, 80);
+            if (videoProgressWrap) videoProgressWrap.style.display = 'none';
+            if (presentationProgressWrap) presentationProgressWrap.style.display = 'none';
+            if (videoProgress) videoProgress.style.width = '0%';
+            if (presentationProgress) presentationProgress.style.width = '0%';
         });
 
-        // Ensure forms with file inputs also show progress when submit via buttons
-        const uploadButtons = document.querySelectorAll('form.uploadForm button[type="submit"]');
-        uploadButtons.forEach(btn => { btn.addEventListener('click', () => { topProgress.style.width = '6%'; setTimeout(()=> topProgress.style.width = '30%', 150); }); });
-
-        // Accessibility: focus visible outline for segmented buttons
-        buttons.forEach(b => { b.addEventListener('focus', () => b.style.outline = '2px solid rgba(86,99,235,0.18)'); b.addEventListener('blur', () => b.style.outline = 'none'); });
+        // Accessibility: focus visible outline for buttons (removed undefined reference)
+        const allButtons = document.querySelectorAll('button');
+        allButtons.forEach(b => { b.addEventListener('focus', () => b.style.outline = '2px solid rgba(86,99,235,0.18)'); b.addEventListener('blur', () => b.style.outline = 'none'); });
     })();
 
 /* Chunked upload support: improves large file uploads by sending in smaller parts with progress. */
@@ -883,92 +877,88 @@
                 contentType = 'presentation';
             }
 
-            // Start progress UI
-            const topProgress = document.getElementById('topProgress');
-            topProgress.style.transition = 'width 120ms linear';
-            const onProgress = (uploaded, total) => {
-                const pct = Math.floor((uploaded / total) * 100);
-                topProgress.style.width = pct + '%';
-            };
-
-            try {
-                await uploadFileInChunks(file, contentType, onProgress);
-                // finish progress and reload page so server shows the new file
-                topProgress.style.width = '100%';
-                setTimeout(() => { location.reload(); }, 400);
-            } catch (err) {
-                alert('Upload failed. Falling back to normal upload. Please try again.');
-                // reset progress and allow normal submit as fallback
-                topProgress.style.width = '0%';
-                // Optionally submit the form normally as fallback (commented out to avoid double-uploads)
-                // form.submit();
+            // Start progress UI based on content type
+            let progressBar, progressWrap;
+            if (contentType === 'presentation') {
+                progressBar = document.getElementById('presentationProgress');
+                progressWrap = document.getElementById('presentationProgressWrap');
+            } else {
+                progressBar = document.getElementById('videoProgress');
+                progressWrap = document.getElementById('videoProgressWrap');
             }
-        });
-    });
-})();
-
-/* Playlist checkbox toggle via AJAX */
-(function(){
-    const checkboxes = document.querySelectorAll('.playlist-checkbox');
-    checkboxes.forEach(checkbox => {
-        checkbox.addEventListener('change', async (e) => {
-            const filename = e.target.dataset.filename;
-            const contentType = e.target.dataset.contentType;
             
-            try {
-                const response = await fetch(`/control/toggle_playlist/${contentType}/${encodeURIComponent(filename)}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                
-                const data = await response.json();
-                if (!data.ok) {
-                    alert('Failed to update playlist: ' + (data.error || 'Unknown error'));
-                    e.target.checked = !e.target.checked; // revert
+            if (progressBar && progressWrap) {
+                progressWrap.style.display = 'block';
+                progressBar.style.transition = 'width 120ms linear';
+                const onProgress = (uploaded, total) => {
+                    const pct = Math.floor((uploaded / total) * 100);
+                    progressBar.style.width = pct + '%';
+                };
+
+                try {
+                    await uploadFileInChunks(file, contentType, onProgress);
+                    // finish progress then reload so new files + checkboxes are rendered
+                    progressBar.style.width = '100%';
+                    setTimeout(() => { location.reload(); }, 400);
+                } catch (err) {
+                    alert('Upload failed. Falling back to normal upload. Please try again.');
+                    // reset progress and allow normal submit as fallback
+                    progressBar.style.width = '0%';
+                    progressWrap.style.display = 'none';
+                    // Optionally submit the form normally as fallback (commented out to avoid double-uploads)
+                    // form.submit();
                 }
-                else {
-                    // refresh the playlist panel to reflect changes
-                    fetchPlaylistOrder().catch(()=>{});
-                }
-            } catch (err) {
-                console.error('Playlist toggle error:', err);
-                alert('Error updating playlist');
-                e.target.checked = !e.target.checked; // revert
             }
         });
     });
 })();
 
-// Playlist panel: fetch, render, reorder & save
-async function fetchPlaylistOrder(){
-    try{
-        const res = await fetch('/api/playlist_order');
-        if (!res.ok) throw new Error('Failed to fetch');
-        const j = await res.json();
-        if (!j.ok) throw new Error(j.error || 'Bad response');
-        renderPlaylistPanel(j.playlist || []);
-        return j.playlist || [];
-    }catch(err){
-        console.error('Playlist fetch failed', err);
-        const ul = document.getElementById('playlistList');
-        if(ul) ul.innerHTML = '<li class="file-item muted">Failed to load playlist</li>';
-        return [];
-    }
+let currentEditingPlaylistId = null;
+let currentEditingPlaylistName = null;
+let currentPlaylistItems = [];
+
+function normalizePlaylistItems(items){
+    const out = [];
+    (items || []).forEach(it => {
+        if(!it) return;
+        if(typeof it === 'string'){
+            out.push({name: it, repeats: 1});
+            return;
+        }
+        if(typeof it === 'object' && it.name){
+            const repeats = Math.max(1, parseInt(it.repeats) || 1);
+            out.push({name: it.name, repeats});
+        }
+    });
+    return out;
 }
 
-function renderPlaylistPanel(items){
-    const ul = document.getElementById('playlistList');
-    if(!ul) return;
-    ul.innerHTML = '';
-    if(!items || items.length === 0){
-        ul.innerHTML = '<li class="file-item" style="justify-content:center"><div class="muted">Playlist empty</div></li>';
+function syncCheckboxesFromState(){
+    const names = new Set(currentPlaylistItems.map(it => it.name));
+    document.querySelectorAll('.playlist-checkbox').forEach(cb => {
+        const dataset = cb.dataset || {};
+        const filename = dataset.file || dataset.filename || dataset.name || '';
+        if(!filename) return;
+        cb.checked = names.has(filename);
+    });
+}
+
+function renderPlaylistEditorFromState(){
+    const list = document.getElementById('playlistList');
+    if(!list) return;
+    list.innerHTML = '';
+
+    if(!currentEditingPlaylistId){
+        list.innerHTML = '<li class="file-item muted">Select a playlist to edit…</li>';
         return;
     }
 
-    items.forEach((it, idx) => {
-        const name = (typeof it === 'string') ? it : (it.name || '');
-        const repeats = (typeof it === 'string') ? 1 : (it.repeats || 1);
+    if(currentPlaylistItems.length === 0){
+        list.innerHTML = '<li class="file-item muted">Playlist is empty. Check items below to add them, then save.</li>';
+        return;
+    }
 
+    currentPlaylistItems.forEach((item, idx) => {
         const li = document.createElement('li');
         li.className = 'file-item';
         li.draggable = true;
@@ -977,65 +967,295 @@ function renderPlaylistPanel(items){
             <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
                 <div style="width:18px;cursor:grab">☰</div>
                 <div class="file-info">
-                    <div class="file-name">${name}</div>
+                    <div class="file-name">${item.name}</div>
                 </div>
             </div>
             <div style="display:flex;gap:8px;align-items:center">
                 <label style="font-size:0.9rem;color:var(--muted)">Repeat
-                    <input type="number" min="1" value="${repeats}" class="playlist-repeat" data-name="${encodeURIComponent(name)}" style="width:64px;margin-left:8px;padding:6px;border-radius:8px;border:1px solid rgba(15,23,42,0.06);text-align:center">
+                    <input type="number" min="1" value="${item.repeats || 1}" class="playlist-repeat" style="width:64px;margin-left:8px;padding:6px;border-radius:8px;border:1px solid rgba(15,23,42,0.06);text-align:center">
                 </label>
             </div>
         `;
 
-        // drag events
-        li.addEventListener('dragstart', (e)=>{ e.dataTransfer.setData('text/plain', String(idx)); li.style.opacity = '0.4'; });
-        li.addEventListener('dragend', (e)=>{ li.style.opacity = ''; });
+        const repeatInput = li.querySelector('.playlist-repeat');
+        if(repeatInput){
+            repeatInput.addEventListener('change', () => {
+                const val = Math.max(1, parseInt(repeatInput.value) || 1);
+                repeatInput.value = val;
+                currentPlaylistItems[idx].repeats = val;
+            });
+        }
+
+        li.addEventListener('dragstart', (e)=>{
+            e.dataTransfer.setData('text/plain', String(idx));
+            li.style.opacity = '0.4';
+        });
+        li.addEventListener('dragend', ()=>{ li.style.opacity = ''; });
         li.addEventListener('dragover', (e)=>{ e.preventDefault(); });
         li.addEventListener('drop', (e)=>{
             e.preventDefault();
             const from = Number(e.dataTransfer.getData('text/plain'));
-            const to = Array.from(ul.children).indexOf(li);
-            if(isNaN(from) || to < 0) return;
-            const node = items.splice(from,1)[0];
-            items.splice(to,0,node);
-            renderPlaylistPanel(items);
+            const to = idx;
+            if(Number.isNaN(from) || to < 0) return;
+            const moved = currentPlaylistItems.splice(from,1)[0];
+            currentPlaylistItems.splice(to,0,moved);
+            renderPlaylistEditorFromState();
+            syncCheckboxesFromState();
         });
 
-        ul.appendChild(li);
+        list.appendChild(li);
     });
+}
 
-    // wire save button
+/* Playlist checkbox toggle via AJAX */
+(function(){
+    const checkboxes = document.querySelectorAll('.playlist-checkbox');
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', (e) => {
+            if(!currentEditingPlaylistId){
+                alert('Select a playlist to edit by clicking the Edit button');
+                e.target.checked = !e.target.checked;
+                return;
+            }
+
+            const dataset = e.target.dataset || {};
+            const filename = dataset.file || dataset.filename || dataset.name || '';
+            if (!filename) {
+                console.error('Playlist toggle: no filename/url found on checkbox', e.target);
+                alert('Failed to update playlist: missing filename');
+                e.target.checked = !e.target.checked;
+                return;
+            }
+
+            const idx = currentPlaylistItems.findIndex(it => it.name === filename);
+            if(e.target.checked){
+                if(idx === -1){
+                    currentPlaylistItems.push({name: filename, repeats: 1});
+                }
+            } else {
+                if(idx !== -1){
+                    currentPlaylistItems.splice(idx,1);
+                }
+            }
+
+            renderPlaylistEditorFromState();
+            syncCheckboxesFromState();
+        });
+    });
+})();
+
+
+// Playlist editor: state is staged locally and saved only when the Save button is clicked.
+
+// Initial load and refresh on page show
+document.addEventListener('DOMContentLoaded', ()=>{ 
+    // Load playlists manager
+    (async function(){
+        try{
+            const res = await fetch('/api/playlists');
+            const j = await res.json();
+            const sel = document.getElementById('playlistSelector');
+            const badge = document.getElementById('currentEditingBadge');
+            if(sel){
+                sel.innerHTML = '';
+                (j.playlists||[]).forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.name; opt.textContent = p.name;
+                    sel.appendChild(opt);
+                });
+            }
+            if(badge){
+                badge.textContent = 'No playlist selected';
+            }
+        }catch(e){ console.warn('Failed to load playlists', e); }
+    })();
+
+    // Wire actions - Edit button loads playlist into editor (staged changes)
+    const editBtn = document.getElementById('editPlaylistBtn');
+    if(editBtn){
+        editBtn.onclick = async function(){
+            const sel = document.getElementById('playlistSelector');
+            const name = sel && sel.value;
+            if(!name) return alert('Select a playlist to edit');
+            
+            // Find playlist by name
+            const listRes = await fetch('/api/playlists');
+            const list = await listRes.json();
+            const target = (list.playlists||[]).find(p=>p.name===name);
+            if(!target) return alert('Playlist not found');
+            
+            // Load playlist into editor
+            currentEditingPlaylistId = target.id;
+            currentEditingPlaylistName = target.name;
+            
+            // Fetch playlist items and normalize to staging state
+            const plRes = await fetch('/api/playlists/' + target.id);
+            const plData = await plRes.json();
+            currentPlaylistItems = normalizePlaylistItems(plData.playlist && plData.playlist.items);
+            
+            // Update badge to show what we're editing
+            const badge = document.getElementById('currentEditingBadge');
+            if(badge) badge.textContent = 'Editing: ' + name;
+            
+            const nameTag = document.getElementById('activeNameTag');
+            if(nameTag) nameTag.textContent = name;
+            
+            // Render editor from staged state
+            renderPlaylistEditorFromState();
+            syncCheckboxesFromState();
+        };
+    }
+
     const saveBtn = document.getElementById('savePlaylistOrder');
     if(saveBtn){
         saveBtn.onclick = async function(){
-            // collect ordered items and repeats
-            const list = Array.from(document.querySelectorAll('#playlistList .file-item'));
-            const out = [];
-            for(const li of list){
-                const nameEl = li.querySelector('.file-name');
-                const input = li.querySelector('.playlist-repeat');
-                const nm = nameEl ? nameEl.textContent.trim() : null;
-                const r = input ? Math.max(1, parseInt(input.value)||1) : 1;
-                if(nm) out.push({name: nm, repeats: r});
+            if(!currentEditingPlaylistId){
+                return alert('No playlist selected for editing. Click Edit to load a playlist first.');
             }
-
+            
+            if(currentPlaylistItems.length === 0){
+                return alert('Playlist is empty. Add items before saving.');
+            }
+            
             try{
-                const res = await fetch('/api/playlist_order', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(out)});
+                // Save staged items to specific playlist by ID
+                const res = await fetch('/api/playlists/' + currentEditingPlaylistId + '/reorder', {
+                    method:'POST', 
+                    headers:{'Content-Type':'application/json'}, 
+                    body: JSON.stringify({items: currentPlaylistItems})
+                });
                 const j = await res.json();
-                if(!j.ok) throw new Error(j.error || 'Failed to save');
-                alert('Playlist order saved');
-                // refresh full page to update checkboxes and state
-                setTimeout(()=> { location.reload(); }, 300);
+                if(!j.playlist) throw new Error(j.error || 'Failed to save');
+                alert('Playlist "' + currentEditingPlaylistName + '" saved');
+                renderPlaylistEditorFromState();
             }catch(err){
                 console.error('Save playlist failed', err);
-                alert('Failed to save playlist order');
+                alert('Failed to save playlist: ' + err.message);
             }
         };
     }
-}
 
-// initial load
-document.addEventListener('DOMContentLoaded', ()=>{ fetchPlaylistOrder().catch(()=>{}); });
+    // Wire actions - Playlist management buttons
+
+    // Wire actions - Playlist management buttons
+    const createBtn = document.getElementById('createPlaylistBtn');
+    if(createBtn){
+        createBtn.onclick = async function(){
+            const inp = document.getElementById('newPlaylistName');
+            const name = inp && inp.value && inp.value.trim();
+            if(!name) return alert('Enter a playlist name');
+            const fd = new FormData(); fd.append('name', name);
+            const res = await fetch('/api/playlists', {method:'POST', body: fd});
+            const j = await res.json();
+            if(!j.id) return alert(j.error||'Failed to create');
+            alert('Created playlist '+name);
+            // reload selector
+            const res2 = await fetch('/api/playlists');
+            const j2 = await res2.json();
+            const sel = document.getElementById('playlistSelector');
+            if(sel){
+                sel.innerHTML='';
+                (j2.playlists||[]).forEach(n=>{ const o=document.createElement('option'); o.value=n.name; o.textContent=n.name; sel.appendChild(o); });
+                sel.value = name;
+            }
+        };
+    }
+
+    const deleteBtn = document.getElementById('deletePlaylistBtn');
+    if(deleteBtn){
+        deleteBtn.onclick = async function(){
+            const sel = document.getElementById('playlistSelector');
+            const name = sel && sel.value;
+            if(!name) return alert('Select a playlist to delete');
+            if(!confirm('Delete playlist '+name+'?')) return;
+            // fetch id by listing
+            const listRes = await fetch('/api/playlists');
+            const list = await listRes.json();
+            const target = (list.playlists||[]).find(p=>p.name===name);
+            if(!target) return alert('Playlist not found');
+            const res = await fetch('/api/playlists/'+encodeURIComponent(target.id), {method:'DELETE'});
+            const j = await res.json();
+            if(!j.ok) return alert(j.error||'Failed to delete');
+            alert('Deleted playlist '+name);
+            // reload selector
+            const res2 = await fetch('/api/playlists');
+            const j2 = await res2.json();
+            if(sel){
+                sel.innerHTML='';
+                (j2.playlists||[]).forEach(n=>{ const o=document.createElement('option'); o.value=n.name; o.textContent=n.name; sel.appendChild(o); });
+            }
+            const badge = document.getElementById('currentEditingBadge');
+            if(badge) badge.textContent = 'No playlist selected';
+            currentEditingPlaylistId = null;
+            currentEditingPlaylistName = null;
+            currentPlaylistItems = [];
+            renderPlaylistEditorFromState();
+        };
+    }
+
+    const dupBtn = document.getElementById('duplicatePlaylistBtn');
+    if(dupBtn){
+        dupBtn.onclick = async function(){
+            const sel = document.getElementById('playlistSelector');
+            const name = sel && sel.value;
+            if(!name) return alert('Select a playlist to duplicate');
+            const listRes = await fetch('/api/playlists');
+            const list = await listRes.json();
+            const target = (list.playlists||[]).find(p=>p.name===name);
+            if(!target) return alert('Playlist not found');
+            const res = await fetch('/api/playlists/'+encodeURIComponent(target.id)+'/duplicate', {method:'POST'});
+            const j = await res.json();
+            if(!j.id) return alert(j.error||'Duplicate failed');
+            alert('Duplicated playlist to '+(j.playlist?.name||'copy'));
+            const res2 = await fetch('/api/playlists');
+            const j2 = await res2.json();
+            if(sel){
+                sel.innerHTML='';
+                (j2.playlists||[]).forEach(n=>{ const o=document.createElement('option'); o.value=n.name; o.textContent=n.name; sel.appendChild(o); });
+            }
+        };
+    }
+
+    const renameBtn = document.getElementById('renamePlaylistBtn');
+    if(renameBtn){
+        renameBtn.onclick = async function(){
+            const sel = document.getElementById('playlistSelector');
+            const name = sel && sel.value;
+            if(!name) return alert('Select a playlist to rename');
+            const newName = prompt('Enter new name', name);
+            if(!newName || newName===name) return;
+            const listRes = await fetch('/api/playlists');
+            const list = await listRes.json();
+            const target = (list.playlists||[]).find(p=>p.name===name);
+            if(!target) return alert('Playlist not found');
+            const res = await fetch('/api/playlists/'+encodeURIComponent(target.id), {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name: newName})});
+            const j = await res.json();
+            if(!j.playlist) return alert(j.error||'Rename failed');
+            alert('Renamed to '+newName);
+            const res2 = await fetch('/api/playlists');
+            const j2 = await res2.json();
+            if(sel){
+                sel.innerHTML='';
+                (j2.playlists||[]).forEach(n=>{ const o=document.createElement('option'); o.value=n.name; o.textContent=n.name; sel.appendChild(o); });
+                sel.value = newName;
+            }
+            currentEditingPlaylistName = newName;
+            const badge = document.getElementById('currentEditingBadge');
+            if(badge) badge.textContent = 'Editing: ' + newName;
+        };
+    }
+
+});
+window.addEventListener('pageshow', ()=>{ renderPlaylistEditorFromState(); });
+
+// Auto-refresh playlists list every 5 seconds to show new uploads
+setInterval(async ()=>{ 
+    try{
+        const res = await fetch('/api/playlists');
+        const j = await res.json();
+        // Update selector if needed
+    }catch(e){}
+}, 5000);
 
 // System stats: define functions first, then attach listeners
 function getBarClass(percent){

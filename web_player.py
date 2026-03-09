@@ -13,6 +13,7 @@ import json
 import hashlib
 import time
 import os
+from utils import read_playlists, get_playlist_by_id, get_active_playlist_id
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -21,7 +22,9 @@ app = Flask(__name__)
 
 CONFIG_FILE = Path.home() / 'signage' / 'config.json'
 
+# Legacy default playlist file; multi-playlist uses config 'activePlaylist'
 PLAYLIST_JSON = Path.home() / 'signage' / 'playlist.json'
+PLAYLISTS_DIR = Path.home() / 'signage' / 'playlists'
 
 VIDEOS_DIR = Path.home() / 'signage' / 'content' / 'videos'
 PRESENTATIONS_DIR = Path.home() / 'signage' / 'content' / 'presentations'
@@ -45,7 +48,23 @@ def get_slide_files():
                 slides.extend(sorted(presentation_dir.glob("slide_*.png")))
     return slides
 
-def get_playlist():
+def get_active_playlist_path():
+    """Return Path for active playlist.
+    Backward compatible: falls back to legacy playlist.json.
+    """
+    try:
+        if CONFIG_FILE.exists():
+            cfg = json.loads(CONFIG_FILE.read_text())
+            active = cfg.get('activePlaylist')
+            if active:
+                p = PLAYLISTS_DIR / f"{Path(active).stem}.json"
+                if p.exists():
+                    return p
+    except Exception:
+        pass
+    return PLAYLIST_JSON
+
+def get_playlist(selected_id: str = None):
     playlist = []
     
     # read mode config (both|video|presentation)
@@ -60,24 +79,37 @@ def get_playlist():
     # If a JSON playlist exists, honor it (selected filenames). It should be a list of filenames
     # (videos or presentation filenames). Presentations are expanded to their cached slides.
     selected = []
+    used_explicit_source = False
     try:
-        if PLAYLIST_JSON.exists():
-            data = json.loads(PLAYLIST_JSON.read_text())
-            if isinstance(data, list):
-                # normalize to list of objects with repeats
-                for entry in data:
-                    if isinstance(entry, str):
-                        selected.append({'name': entry, 'repeats': 1})
-                    elif isinstance(entry, dict):
-                        name = entry.get('name') or entry.get('filename')
-                        try:
-                            repeats = int(entry.get('repeats', 1))
-                        except Exception:
-                            repeats = 1
-                        if name:
-                            selected.append({'name': name, 'repeats': max(1, repeats)})
+        # Prefer new playlists.json if present
+        store = read_playlists()
+        pid = selected_id or get_active_playlist_id()
+        data_list = None
+        if pid:
+            pl = get_playlist_by_id(pid)
+            if pl:
+                data_list = pl.get('items', [])
+                used_explicit_source = True
+        if data_list is None:
+            # Fallback to legacy file
+            pl_path = get_active_playlist_path()
+            if pl_path.exists():
+                data_list = json.loads(pl_path.read_text())
+                used_explicit_source = True
+        if isinstance(data_list, list):
+            for entry in data_list:
+                if isinstance(entry, str):
+                    selected.append({'name': entry, 'repeats': 1})
+                elif isinstance(entry, dict):
+                    name = entry.get('name') or entry.get('filename') or entry.get('url')
+                    try:
+                        repeats = int(entry.get('repeats', 1))
+                    except Exception:
+                        repeats = 1
+                    if name:
+                        selected.append({'name': name, 'repeats': max(1, repeats)})
     except Exception:
-        logger.exception('Failed to read playlist.json')
+        logger.exception('Failed to read playlist')
 
     # Build maps
     video_files = {v.name: v for v in get_video_files()}
@@ -87,7 +119,18 @@ def get_playlist():
         for entry in selected:
             name = entry.get('name')
             repeats = entry.get('repeats', 1)
+            
+            # Check if name is valid before string operations
             if not name:
+                continue
+            
+            # Check for YouTube URLs
+            if "youtube.com" in name or "youtu.be" in name:
+                playlist.append({
+                    "type": "youtube",
+                    "url": name,
+                    "name": name
+                })
                 continue
             if name in video_files and mode in ('both', 'video'):
                 for _ in range(repeats):
@@ -111,28 +154,30 @@ def get_playlist():
                                 'duration': SLIDE_DURATION
                             })
     else:
-        for video in get_video_files():
-            if mode in ('both', 'video'):
-                playlist.append({
-                'type': 'video',
-                'url': f'/content/videos/{video.name}',
-                'name': video.name
-                })
-        
-        for slide in get_slide_files():
-            if mode in ('both', 'presentation'):
-                relative_path = slide.relative_to(SLIDES_CACHE_DIR)
-                playlist.append({
-                'type': 'image',
-                'url': f'/content/slides/{relative_path.as_posix()}',
-                'name': slide.name,
-                'duration': SLIDE_DURATION
-                })
+        # Only auto-scan directories if we did not use playlists.json or legacy file
+        if not used_explicit_source:
+            for video in get_video_files():
+                if mode in ('both', 'video'):
+                    playlist.append({
+                    'type': 'video',
+                    'url': f'/content/videos/{video.name}',
+                    'name': video.name
+                    })
+            
+            for slide in get_slide_files():
+                if mode in ('both', 'presentation'):
+                    relative_path = slide.relative_to(SLIDES_CACHE_DIR)
+                    playlist.append({
+                    'type': 'image',
+                    'url': f'/content/slides/{relative_path.as_posix()}',
+                    'name': slide.name,
+                    'duration': SLIDE_DURATION
+                    })
     
     return playlist
 
-def get_playlist_hash():
-    playlist = get_playlist()
+def get_playlist_hash(selected_id: str = None):
+    playlist = get_playlist(selected_id)
     playlist_str = json.dumps(playlist, sort_keys=True)
     return hashlib.md5(playlist_str.encode()).hexdigest()
 
@@ -141,9 +186,7 @@ def get_playlist_hash():
 # They are added in a way that does not change the existing `/api/playlist` behavior.
 
 # Global playlist sync state (kept separate so original API is unchanged)
-_playlist_cache = None
-_playlist_hash_cache = None
-_playlist_start_time = None
+_sync_states = {}
 
 def get_video_duration(video_path):
     """Get video duration in seconds (placeholder).
@@ -152,7 +195,7 @@ def get_video_duration(video_path):
     """
     return 30  # default estimate in seconds
 
-def build_playlist_with_durations():
+def build_playlist_with_durations(selected_id: str = None):
     """Build playlist including per-item durations for sync playback."""
     playlist = []
 
@@ -165,25 +208,20 @@ def build_playlist_with_durations():
     except Exception:
         mode = 'both'
 
-    for video in get_video_files():
-        if mode in ('both', 'video'):
-            duration = get_video_duration(video)
-            playlist.append({
-                'type': 'video',
-                'url': f'/content/videos/{video.name}',
-                'name': video.name,
-                'duration': duration
-            })
-
-    for slide in get_slide_files():
-        if mode in ('both', 'presentation'):
-            relative_path = slide.relative_to(SLIDES_CACHE_DIR)
-            playlist.append({
-                'type': 'image',
-                'url': f'/content/slides/{relative_path.as_posix()}',
-                'name': slide.name,
-                'duration': SLIDE_DURATION
-            })
+    # Use the same source as get_playlist() to respect selected_id
+    base_list = get_playlist(selected_id)
+    for item in base_list:
+        if item.get('type') == 'video':
+            # derive filename from URL
+            name = item.get('name')
+            duration = get_video_duration(VIDEOS_DIR / name)
+            p = dict(item)
+            p['duration'] = duration
+            playlist.append(p)
+        else:
+            p = dict(item)
+            p['duration'] = item.get('duration', SLIDE_DURATION)
+            playlist.append(p)
 
     return playlist
 
@@ -213,11 +251,35 @@ def get_current_item_index(playlist, elapsed_time):
 def player():
     return render_template('web_player.html')
 
+@app.route('/api/playlists')
+def api_playlists():
+    store = read_playlists()
+    items = []
+    for pl in store.get('playlists', []):
+        items.append({
+            'id': pl.get('id'),
+            'name': pl.get('name'),
+            'itemCount': len(pl.get('items', [])),
+            'created_at': pl.get('created_at'),
+            'updated_at': pl.get('updated_at')
+        })
+    return jsonify({'playlists': items, 'active_playlist_id': store.get('active_playlist_id')})
+
 @app.route('/api/playlist')
 def api_playlist():
+    playlist_id = None
+    try:
+        playlist_id = os.environ.get('PLAYLIST_ID')
+    except Exception:
+        pass
+    try:
+        from flask import request
+        playlist_id = request.args.get('playlist_id') or playlist_id
+    except Exception:
+        pass
     return jsonify({
-        'playlist': get_playlist(),
-        'hash': get_playlist_hash()
+        'playlist': get_playlist(playlist_id),
+        'hash': get_playlist_hash(playlist_id)
     })
 
 
@@ -227,20 +289,30 @@ def api_playlist_sync():
     Returns playlist with durations and server timing so clients can
     align playback. This does not replace the original `/api/playlist`.
     """
-    global _playlist_cache, _playlist_hash_cache, _playlist_start_time
+    try:
+        from flask import request
+        selected_id = request.args.get('playlist_id')
+    except Exception:
+        selected_id = None
 
-    playlist = build_playlist_with_durations()
+    state = _sync_states.get(selected_id or '__default__', {
+        'playlist_cache': None,
+        'playlist_hash': None,
+        'start_time': None
+    })
+
+    playlist = build_playlist_with_durations(selected_id)
     playlist_hash = get_playlist_hash_from(playlist)
 
-    # If playlist changed, reset start time
-    if playlist_hash != _playlist_hash_cache:
-        _playlist_cache = playlist
-        _playlist_hash_cache = playlist_hash
-        _playlist_start_time = time.time()
+    if playlist_hash != state['playlist_hash']:
+        state['playlist_cache'] = playlist
+        state['playlist_hash'] = playlist_hash
+        state['start_time'] = time.time()
+        _sync_states[selected_id or '__default__'] = state
         logger.info(f"Playlist updated (sync): {len(playlist)} items")
 
-    if _playlist_start_time and playlist:
-        elapsed = time.time() - _playlist_start_time
+    if state['start_time'] and playlist:
+        elapsed = time.time() - state['start_time']
         current_index, item_elapsed = get_current_item_index(playlist, elapsed)
     else:
         current_index = 0
@@ -250,7 +322,7 @@ def api_playlist_sync():
         'playlist': playlist,
         'hash': playlist_hash,
         'serverTime': time.time(),
-        'playlistStartTime': _playlist_start_time or time.time(),
+        'playlistStartTime': state['start_time'] or time.time(),
         'currentIndex': current_index,
         'itemElapsed': item_elapsed
     })

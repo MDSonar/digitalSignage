@@ -1,0 +1,91 @@
+# Litmus Digital Signage - Docker Compose Configuration
+services:
+  # Main Dashboard Service
+  dashboard:
+    build: .
+    container_name: litmus-signage-dashboard
+    ports:
+      - "5000:5000"
+    volumes:
+      # Persistent storage for content and data
+      - signage-content:/root/signage/content
+      - signage-cache:/root/signage/cache
+      - signage-logs:/root/signage/logs
+      - signage-data:/root/signage
+      # Mount logo folder (optional - add your logo here)
+      - ./logo:/root/signage/logo:ro
+    environment:
+      - FLASK_ENV=production
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    networks:
+      - signage-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Web Player Service (for network TVs)
+  web-player:
+    build: .
+    container_name: litmus-signage-web-player
+    command: python web_player.py
+    ports:
+      - "8080:8080"
+    volumes:
+      # Share same content and cache as dashboard
+      - signage-content:/root/signage/content:ro
+      - signage-cache:/root/signage/cache:ro
+      - signage-data:/root/signage:ro
+    environment:
+      - FLASK_ENV=production
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    networks:
+      - signage-network
+    depends_on:
+      - dashboard
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # HDMI Player Service (optional - for direct display)
+  # Uncomment if you need VLC player for HDMI output
+  # hdmi-player:
+  #   build: .
+  #   container_name: litmus-signage-hdmi-player
+  #   command: python player.py
+  #   volumes:
+  #     - signage-content:/root/signage/content:ro
+  #     - signage-cache:/root/signage/cache
+  #     - signage-data:/root/signage
+  #     - signage-logs:/root/signage/logs
+  #   environment:
+  #     - PYTHONUNBUFFERED=1
+  #     - DISPLAY=${DISPLAY}
+  #   restart: unless-stopped
+  #   networks:
+  #     - signage-network
+  #   depends_on:
+  #     - dashboard
+  #   devices:
+  #     - /dev/dri:/dev/dri  # GPU access for video playback
+
+volumes:
+  signage-content:
+    driver: local
+  signage-cache:
+    driver: local
+  signage-logs:
+    driver: local
+  signage-data:
+    driver: local
+
+networks:
+  signage-network:
+    driver: bridge

@@ -6,6 +6,7 @@ Digital Signage Web Dashboard
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, send_from_directory
 from werkzeug.utils import secure_filename
 from werkzeug.security import check_password_hash, generate_password_hash
+from urllib.parse import unquote
 from functools import wraps
 import os
 from pathlib import Path
@@ -18,6 +19,12 @@ import sys
 import json
 from pathlib import PurePath
 import platform
+import hashlib
+from utils import (
+    read_playlists, write_playlists, ensure_playlist_store, get_playlist_by_id,
+    create_playlist, update_playlist, delete_playlist, duplicate_playlist,
+    set_active_playlist, get_active_playlist_id, reorder_playlists
+)
 
 # Optional: psutil for system stats (graceful degradation if not installed)
 try:
@@ -41,9 +48,12 @@ app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
 VIDEOS_DIR = Path.home() / 'signage' / 'content' / 'videos'
 PRESENTATIONS_DIR = Path.home() / 'signage' / 'content' / 'presentations'
+YOUTUBE_LINKS_FILE = Path.home() / 'signage' / 'youtube_links.json'
 CACHE_DIR = Path.home() / 'signage' / 'cache' / 'slides'  # NEW: Cache directory
 CONFIG_FILE = Path.home() / 'signage' / 'config.json'
 PLAYLIST_FILE = Path.home() / 'signage' / 'playlist.json'
+PLAYLISTS_DIR = Path.home() / 'signage' / 'playlists'
+PLAYLISTS_DIR.mkdir(parents=True, exist_ok=True)
 WEB_PLAYER_PID = Path.home() / 'signage' / 'web_player.pid'
 SIGNAGE_PLAYER_PID = Path.home() / 'signage' / 'signage_player.pid'
 COMMANDS_DIR = Path.home() / 'signage' / 'commands'
@@ -106,20 +116,98 @@ def get_file_size_from_bytes(size):
     return f"{size:.1f} TB"
 
 
-def read_config():
+def convert_presentation_to_slides(presentation_path: Path):
+    """Convert presentation (PPTX/PPT/PDF) to PNG slides.
+    
+    Pipeline:
+    1. If PPTX/PPT: Convert to PDF using LibreOffice
+    2. Convert PDF to PNG images using ImageMagick
+    3. Save PNGs to cache/slides/{stem}/slide_001.png, slide_002.png, etc.
+    """
     try:
-        if CONFIG_FILE.exists():
-            return json.loads(CONFIG_FILE.read_text())
+        stem = presentation_path.stem
+        cache_path = CACHE_DIR / stem
+        cache_path.mkdir(parents=True, exist_ok=True)
+        
+        logger.info(f"Converting {presentation_path.name} to slides...")
+        
+        # Step 1: Convert to PDF if not already PDF
+        if presentation_path.suffix.lower() in ['.pptx', '.ppt']:
+            pdf_path = cache_path / f"{stem}.pdf"
+            
+            # Try LibreOffice conversion
+            try:
+                # Use soffice for conversion (LibreOffice headless)
+                cmd = [
+                    'soffice',
+                    '--headless',
+                    '--convert-to', 'pdf',
+                    '--outdir', str(cache_path),
+                    str(presentation_path)
+                ]
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+                
+                if result.returncode != 0:
+                    logger.error(f"LibreOffice conversion failed: {result.stderr}")
+                    return False
+                    
+                logger.info(f"✓ Converted to PDF: {pdf_path}")
+            except FileNotFoundError:
+                logger.error("LibreOffice (soffice) not found. Install libreoffice-impress.")
+                return False
+            except subprocess.TimeoutExpired:
+                logger.error("LibreOffice conversion timed out")
+                return False
+        else:
+            # Already a PDF
+            pdf_path = presentation_path
+        
+        # Step 2: Convert PDF to PNG images using ImageMagick
+        if pdf_path.exists():
+            try:
+                # Use ImageMagick convert command
+                output_pattern = str(cache_path / "slide_%03d.png")
+                cmd = [
+                    'convert',
+                    '-density', '150',  # DPI for quality
+                    str(pdf_path),
+                    output_pattern
+                ]
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+                
+                if result.returncode != 0:
+                    logger.error(f"ImageMagick conversion failed: {result.stderr}")
+                    return False
+                
+                # Count generated slides
+                slides = list(cache_path.glob("slide_*.png"))
+                logger.info(f"✓ Generated {len(slides)} slides in {cache_path}")
+                
+                # Clean up intermediate PDF if we created it
+                if pdf_path != presentation_path and pdf_path.exists():
+                    pdf_path.unlink()
+                
+                return True
+            except FileNotFoundError:
+                logger.error("ImageMagick (convert) not found. Install imagemagick.")
+                return False
+            except subprocess.TimeoutExpired:
+                logger.error("ImageMagick conversion timed out")
+                return False
+        
+        return False
     except Exception:
-        logger.exception('Failed to read config')
-    # default
-    return {'mode': 'both'}
-
+        logger.exception(f"Failed to convert presentation {presentation_path.name}")
+        return False
 
 def read_playlist():
     try:
-        if PLAYLIST_FILE.exists():
-            return json.loads(PLAYLIST_FILE.read_text())
+        if not PLAYLIST_FILE.exists():
+            # initialize empty playlist file for first-time runs
+            PLAYLIST_FILE.parent.mkdir(parents=True, exist_ok=True)
+            PLAYLIST_FILE.write_text(json.dumps([]))
+            return []
+        return json.loads(PLAYLIST_FILE.read_text())
     except Exception:
         logger.exception('Failed to read playlist')
     return []
@@ -134,9 +222,129 @@ def write_playlist(lst):
         logger.exception('Failed to write playlist')
         return False
 
+# --- Multi-playlist helpers (backward compatible) ---
+def list_playlists():
+    """Return list of playlist names available in PLAYLISTS_DIR."""
+    out = []
+    try:
+        for p in sorted(PLAYLISTS_DIR.glob('*.json')):
+            out.append(p.stem)
+    except Exception:
+        logger.exception('Failed to list playlists')
+    return out
+
+def read_playlist_by_name(name: str):
+    """Read a named playlist (stored as JSON list) from PLAYLISTS_DIR."""
+    try:
+        path = PLAYLISTS_DIR / f"{Path(name).stem}.json"
+        if path.exists():
+            return json.loads(path.read_text())
+    except Exception:
+        logger.exception('Failed to read named playlist')
+    return []
+
+def write_playlist_by_name(name: str, lst):
+    try:
+        path = PLAYLISTS_DIR / f"{Path(name).stem}.json"
+        path.write_text(json.dumps(lst))
+        return True
+    except Exception:
+        logger.exception('Failed to write named playlist')
+        return False
+
+def get_active_playlist_name():
+    cfg = read_config()
+    return cfg.get('activePlaylist')
+
+def set_active_playlist_name(name: str):
+    cfg = read_config()
+    if name:
+        cfg['activePlaylist'] = Path(name).stem
+    else:
+        cfg.pop('activePlaylist', None)
+    return write_config(cfg)
+
+@app.route('/playlists', methods=['GET'])
+@login_required
+def playlists_index():
+    return jsonify({
+        'active': get_active_playlist_name(),
+        'items': list_playlists()
+    })
+
+@app.route('/playlists/create', methods=['POST'])
+@login_required
+def playlists_create():
+    name = request.form.get('name')
+    if not name:
+        return jsonify({'ok': False, 'error': 'name required'}), 400
+    if name in list_playlists():
+        return jsonify({'ok': False, 'error': 'playlist exists'}), 409
+    ok = write_playlist_by_name(name, [])
+    return jsonify({'ok': ok, 'name': name})
+
+@app.route('/playlists/select', methods=['POST'])
+@login_required
+def playlists_select():
+    name = request.form.get('name')
+    if not name or name not in list_playlists():
+        return jsonify({'ok': False, 'error': 'unknown playlist'}), 404
+    ok = set_active_playlist_name(name)
+    return jsonify({'ok': ok, 'active': name})
+
+@app.route('/playlists/delete', methods=['POST'])
+@login_required
+def playlists_delete():
+    name = request.form.get('name')
+    if not name:
+        return jsonify({'ok': False, 'error': 'name required'}), 400
+    try:
+        path = PLAYLISTS_DIR / f"{Path(name).stem}.json"
+        if path.exists():
+            path.unlink()
+        # clear active if deleting active
+        if get_active_playlist_name() == Path(name).stem:
+            set_active_playlist_name(None)
+        return jsonify({'ok': True})
+    except Exception:
+        logger.exception('Failed to delete playlist')
+        return jsonify({'ok': False}), 500
+
+@app.route('/playlists/update', methods=['POST'])
+@login_required
+def playlists_update():
+    """Update items of a named playlist. Expects JSON body with {'name': str, 'items': list}"""
+    try:
+        payload = request.get_json(force=True)
+        name = payload.get('name')
+        items = payload.get('items')
+        if not isinstance(items, list) or not name:
+            return jsonify({'ok': False, 'error': 'invalid payload'}), 400
+        ok = write_playlist_by_name(name, items)
+        return jsonify({'ok': ok})
+    except Exception:
+        logger.exception('Failed to update playlist')
+        return jsonify({'ok': False}), 500
+
+def read_youtube_links():
+    try:
+        if YOUTUBE_LINKS_FILE.exists():
+            return json.loads(YOUTUBE_LINKS_FILE.read_text())
+    except Exception:
+        logger.exception("Failed to read youtube links")
+    return []
+
+def write_youtube_links(data):
+    try:
+        YOUTUBE_LINKS_FILE.write_text(json.dumps(data))
+        return True
+    except Exception:
+        logger.exception("Failed to write youtube links")
+        return False
+
 
 def normalize_playlist_to_objects(raw):
-    """Return playlist as list of objects: {'name':..., 'repeats': int}
+    """Return playlist as list of objects: {'name':..., 'repeats': int, 'type': ...}
     Accepts legacy list of strings or list of objects and returns normalized list.
     """
     out = []
@@ -146,6 +354,18 @@ def normalize_playlist_to_objects(raw):
         for item in raw:
             if isinstance(item, str):
                 out.append({'name': item, 'repeats': 1})
+            elif isinstance(item, dict) and item.get('type') == 'youtube':
+                url = item.get('url') or item.get('name')
+                try:
+                    repeats_val = int(item.get('repeats', 1))
+                except Exception:
+                    repeats_val = 1
+                out.append({
+                    'name': url,
+                    'url': url,
+                    'type': 'youtube',
+                    'repeats': repeats_val
+                })
             elif isinstance(item, dict):
                 name = item.get('name') or item.get('filename')
                 try:
@@ -153,7 +373,12 @@ def normalize_playlist_to_objects(raw):
                 except Exception:
                     repeats = 1
                 if name:
-                    out.append({'name': name, 'repeats': max(1, repeats)})
+                    # Preserve type if present
+                    obj = {'name': name, 'repeats': max(1, repeats)}
+                    if item.get('type'):
+                        obj['type'] = item.get('type')
+                    out.append(obj)
+
     return out
 
 
@@ -166,11 +391,37 @@ def playlist_names_set(raw):
         for item in raw:
             if isinstance(item, str):
                 s.add(item)
+            elif isinstance(item, dict) and item.get('type') == 'youtube':
+                s.add(item.get('url') or item.get('name'))
             elif isinstance(item, dict):
                 n = item.get('name') or item.get('filename')
                 if n:
                     s.add(n)
+
     return s
+
+
+def remove_from_playlist(name_or_url: str) -> bool:
+    """Remove any playlist entries matching the given name or URL."""
+    try:
+        raw = read_playlist()
+        items = normalize_playlist_to_objects(raw)
+        filtered = [it for it in items if (it.get('name') != name_or_url and it.get('url') != name_or_url)]
+        if len(filtered) != len(items):
+            return write_playlist(filtered)
+    except Exception:
+        logger.exception('Failed to remove item from playlist')
+    return False
+
+
+def read_config():
+    """Read configuration from config file."""
+    try:
+        if CONFIG_FILE.exists():
+            return json.loads(CONFIG_FILE.read_text())
+    except Exception:
+        logger.exception('Failed to read config')
+    return {}
 
 
 def write_config(cfg: dict):
@@ -206,11 +457,15 @@ def is_process_running(pidfile: Path, expected_cmd_substr: str = None):
     except Exception:
         return False
     if expected_cmd_substr:
-        try:
-            cmdline = Path(f"/proc/{pid}/cmdline").read_text().replace('\x00', ' ')
-            return expected_cmd_substr in cmdline
-        except Exception:
-            return False
+        # Only verify cmdline on Linux where /proc filesystem is available
+        if platform.system() == 'Linux':
+            try:
+                cmdline = Path(f"/proc/{pid}/cmdline").read_text().replace('\x00', ' ')
+                return expected_cmd_substr in cmdline
+            except Exception:
+                return False
+        # On other platforms, just return True if process exists
+        # (less precise but prevents crashes)
     return True
 
 
@@ -221,7 +476,15 @@ def start_process(cmd: list, pidfile: Path):
         stdout_log = LOGS_DIR / f"{Path(cmd[-1]).stem}.out.log"
         stderr_log = LOGS_DIR / f"{Path(cmd[-1]).stem}.err.log"
         logger.info("Starting process: %s, stdout=%s, stderr=%s", cmd, stdout_log, stderr_log)
-        proc = subprocess.Popen(cmd, stdout=open(stdout_log, 'ab'), stderr=open(stderr_log, 'ab'), preexec_fn=os.setsid, close_fds=True)
+        
+        # Windows compatibility: use CREATE_NEW_PROCESS_GROUP instead of os.setsid
+        if platform.system() == 'Windows':
+            proc = subprocess.Popen(cmd, stdout=open(stdout_log, 'ab'), stderr=open(stderr_log, 'ab'), 
+                                  creationflags=subprocess.CREATE_NEW_PROCESS_GROUP, close_fds=False)
+        else:
+            proc = subprocess.Popen(cmd, stdout=open(stdout_log, 'ab'), stderr=open(stderr_log, 'ab'), 
+                                  preexec_fn=os.setsid, close_fds=True)
+        
         pidfile.parent.mkdir(parents=True, exist_ok=True)
         pidfile.write_text(str(proc.pid))
         logger.info(f"Started process {cmd[0]} pid={proc.pid}")
@@ -238,12 +501,23 @@ def stop_process(pidfile: Path):
         raw = pidfile.read_text().strip()
         pid = int(raw)
 
-        # Try graceful terminate of the process group (we started with setsid)
+        # Try graceful terminate of the process group
         try:
-            os.killpg(pid, signal.SIGTERM)
+            if platform.system() == 'Windows':
+                # Windows: use taskkill for process tree termination
+                subprocess.run(['taskkill', '/F', '/T', '/PID', str(pid)], 
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            else:
+                # POSIX: use killpg to terminate process group
+                os.killpg(pid, signal.SIGTERM)
         except Exception:
             try:
-                os.kill(pid, signal.SIGTERM)
+                # Fallback to killing single process
+                if platform.system() == 'Windows':
+                    subprocess.run(['taskkill', '/F', '/PID', str(pid)], 
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                else:
+                    os.kill(pid, signal.SIGTERM)
             except Exception:
                 logger.warning('Failed to SIGTERM pid/pgrp=%s', pid)
 
@@ -257,10 +531,16 @@ def stop_process(pidfile: Path):
 
         # If still running, force kill the group
         try:
-            os.killpg(pid, signal.SIGKILL)
+            if platform.system() == 'Windows':
+                # Already killed forcefully with /F flag above
+                pass
+            else:
+                # POSIX: force kill with SIGKILL
+                os.killpg(pid, signal.SIGKILL)
         except Exception:
             try:
-                os.kill(pid, signal.SIGKILL)
+                if platform.system() != 'Windows':
+                    os.kill(pid, signal.SIGKILL)
             except Exception:
                 logger.warning('Failed to SIGKILL pid/pgrp=%s', pid)
 
@@ -370,21 +650,44 @@ def upload_chunk(content_type):
             except Exception:
                 logger.exception('Failed to cleanup tmp upload dir')
 
-            # If presentation, trigger background conversion like in upload_file
+            # Convert presentation to slides if it's a presentation
             if content_type == 'presentation':
-                try:
-                    python = sys.executable or 'python3'
-                    script = Path(__file__).parent / 'player.py'
-                    subprocess.Popen([python, str(script), '--convert', str(final_path)],
-                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
-                    logger.info(f"Spawned background converter for (chunked): {safe_name}")
-                except Exception:
-                    logger.exception('Failed to spawn converter process for chunked upload')
+                logger.info(f'Starting presentation conversion for {safe_name}')
+                convert_presentation_to_slides(final_path)
 
         return jsonify({'ok': True, 'index': index, 'total': total})
     except Exception:
         logger.exception('Chunk upload failed')
         return jsonify({'ok': False, 'error': 'server error'}), 500
+
+@app.route('/add_youtube_link', methods=['POST'])
+@login_required
+def add_youtube_link():
+    url = request.form.get('youtube_url', "").strip()
+    name = request.form.get('youtube_name', "").strip() or url
+
+    if not url or (("youtube.com" not in url) and ("youtu.be" not in url)):
+        flash("Invalid YouTube link", "error")
+        return redirect(url_for('dashboard'))
+
+    links = read_youtube_links()
+    links.append({"name": name, "url": url})
+    write_youtube_links(links)
+
+    flash("YouTube link added!", "success")
+    return redirect(url_for('dashboard'))
+
+@app.route('/delete_youtube_link', methods=['POST'])
+@login_required
+def delete_youtube_link():
+    url = request.form.get("url")
+    links = read_youtube_links()
+    links = [l for l in links if l["url"] != url]
+    write_youtube_links(links)
+    # Also remove from playlist if present
+    remove_from_playlist(url)
+    flash("YouTube link deleted!", "success")
+    return redirect(url_for("dashboard"))
 
 @app.route('/')
 def index():
@@ -416,7 +719,15 @@ def logout():
 def dashboard():
     videos = []
     presentations = []
-    playlist = read_playlist()
+    youtube_links = []
+    yt_data = read_youtube_links()
+    ensure_playlist_store()
+    active_id = get_active_playlist_id()
+    if active_id:
+        pl = get_playlist_by_id(active_id)
+        playlist = pl.get('items', []) if pl else []
+    else:
+        playlist = read_playlist()
     playlist_set = playlist_names_set(playlist)
     
     try:
@@ -444,39 +755,109 @@ def dashboard():
                         'format': get_file_format(file),
                         'in_playlist': file.name in playlist_set
                     })
+
+        for item in yt_data:
+            youtube_links.append({
+                "name": item.get("name"),
+                "url": item.get("url"),
+                "type": "youtube",
+                "in_playlist": item.get("url") in playlist_set
+            })
         
     except Exception as e:
         logger.error(f"Error loading dashboard: {e}", exc_info=True)
         flash('Error loading files', 'error')
     
-    # read current config and process status
-    cfg = read_config()
+    # Check process status
     web_running = is_process_running(WEB_PLAYER_PID, 'web_player.py')
-    signage_running = is_process_running(SIGNAGE_PLAYER_PID, 'player.py')
 
     return render_template('dashboard.html', 
                         videos=videos, 
                         presentations=presentations, 
+                        youtube_links=youtube_links,
                         username=session.get('username'),
-                        mode=cfg.get('mode', 'both'),
                         web_running=web_running,
-                        signage_running=signage_running,
                         playlist=playlist,
                         playlist_set=playlist_set)
 
 
-@app.route('/control/toggle_playlist/<content_type>/<filename>', methods=['POST'])
-@login_required
+@app.route('/control/toggle_playlist/<content_type>/<path:filename>', methods=['POST'])
+# Made public so playlist toggles don't break if session cookies expire during long dashboard use
 def toggle_playlist(content_type, filename):
-    """Toggle a file in/out of the playlist"""
-    if content_type not in ('video', 'presentation'):
-        return jsonify({'ok': False, 'error': 'invalid content type'}), 400
+    """Toggle an item (video/presentation/youtube) in/out of the playlist
     
-    try:
-        raw = read_playlist()
-        items = normalize_playlist_to_objects(raw)
+    Optional query param: ?playlist_id=<id> to target specific playlist.
+    If not provided, uses active playlist for backward compatibility.
+    """
 
-        # Check if filename present
+    # decode URL encoded filename/url (client sends encodeURIComponent(...))
+    filename = unquote(filename)
+    
+    # Check for explicit playlist_id param
+    target_playlist_id = request.args.get('playlist_id')
+    
+    logger.info(f"Toggle playlist request - type: {content_type}, filename: {filename}, playlist_id: {target_playlist_id}")
+
+    # Allow YouTube links
+    if content_type not in ('video', 'presentation', 'youtube'):
+        logger.error(f"Invalid content type: {content_type}")
+        return jsonify({'ok': False, 'error': 'invalid content type'}), 400
+
+    try:
+        # Use explicit playlist_id or fallback to active for backward compat
+        playlist_id = target_playlist_id or get_active_playlist_id()
+        if playlist_id:
+            pl = get_playlist_by_id(playlist_id)
+            raw = pl.get('items', []) if pl else []
+        else:
+            raw = read_playlist()
+        items = normalize_playlist_to_objects(raw)
+        logger.info(f"Current playlist items: {len(items)}")
+
+        # -----------------------------
+        # SPECIAL HANDLING: YOUTUBE LINK
+        # -----------------------------
+        if content_type == 'youtube':
+            # normalize filename/url for matching
+            target_url = filename
+
+            # Check if URL already exists (match on name or url field)
+            found = None
+            for it in items:
+                if it.get('type') == 'youtube' and (it.get('name') == target_url or it.get('url') == target_url):
+                    found = it
+                    break
+
+            if found:
+                # Remove it
+                items = [
+                    it for it in items
+                    if not (it.get('type') == 'youtube' and (it.get('name') == target_url or it.get('url') == target_url))
+                ]
+                in_playlist = False
+            else:
+                # Add new YouTube entry
+                items.append({
+                    'name': target_url,   # This is the URL
+                    'url': target_url,
+                    'type': 'youtube',
+                    'repeats': 1
+                })
+                in_playlist = True
+
+            if playlist_id:
+                ok, _ = update_playlist(playlist_id, items=items)
+            else:
+                ok = write_playlist(items)
+            if not ok:
+                logger.error("Failed to write playlist to file")
+                return jsonify({'ok': False, 'error': 'failed to save playlist'}), 500
+            logger.info(f"YouTube toggle success - in_playlist: {in_playlist}")
+            return jsonify({'ok': True, 'in_playlist': in_playlist, 'filename': filename})
+
+        # -----------------------------
+        # NORMAL HANDLING (video/presentation)
+        # -----------------------------
         found = None
         for it in items:
             if it.get('name') == filename:
@@ -484,44 +865,40 @@ def toggle_playlist(content_type, filename):
                 break
 
         if found:
-            # remove all entries matching this name
+            # Remove entries
             items = [it for it in items if it.get('name') != filename]
             in_playlist = False
         else:
-            items.append({'name': filename, 'repeats': 1})
+            # Add new entry — include explicit type for clarity
+            items.append({'name': filename, 'type': content_type, 'repeats': 1})
             in_playlist = True
 
-        ok = write_playlist(items)
+        if playlist_id:
+            ok, _ = update_playlist(playlist_id, items=items)
+        else:
+            ok = write_playlist(items)
         if ok:
+            logger.info(f"Toggle success for {filename} - in_playlist: {in_playlist}")
             return jsonify({'ok': True, 'in_playlist': in_playlist, 'filename': filename})
         else:
+            logger.error("Failed to write playlist")
             return jsonify({'ok': False, 'error': 'failed to save'}), 500
+
     except Exception as e:
         logger.exception('Failed to toggle playlist')
         return jsonify({'ok': False, 'error': str(e)}), 500
 
-
-@app.route('/control/set_mode', methods=['POST'])
-@login_required
-def set_mode():
-    mode = request.form.get('mode', 'both')
-    if mode not in ('both', 'video', 'presentation'):
-        flash('Invalid mode', 'error')
-        return redirect(url_for('dashboard'))
-    ok = write_config({'mode': mode})
-    if ok:
-        flash(f'Mode set to: {mode}', 'success')
-    else:
-        flash('Failed to save mode', 'error')
-    return redirect(url_for('dashboard'))
-
-
 @app.route('/api/playlist_order', methods=['GET'])
-@login_required
 def api_playlist_order_get():
     """Return normalized playlist (ordered) as list of objects {name, repeats}."""
     try:
-        raw = read_playlist()
+        # Use active playlist id if configured; otherwise legacy single file
+        active_id = get_active_playlist_id()
+        if active_id:
+            pl = get_playlist_by_id(active_id)
+            raw = pl.get('items', []) if pl else []
+        else:
+            raw = read_playlist()
         items = normalize_playlist_to_objects(raw)
         return jsonify({'ok': True, 'playlist': items})
     except Exception:
@@ -529,10 +906,23 @@ def api_playlist_order_get():
         return jsonify({'ok': False, 'error': 'server error'}), 500
 
 
+# Public playlist endpoint for diagnostics and player checks (no auth)
+@app.route('/api/playlist', methods=['GET'])
+def api_playlist():
+    try:
+        active = get_active_playlist_name()
+        raw = read_playlist_by_name(active) if active else read_playlist()
+        playlist = normalize_playlist_to_objects(raw)
+        playlist_hash = hashlib.md5(json.dumps(playlist, sort_keys=True).encode()).hexdigest()
+        return jsonify({'playlist': playlist, 'hash': playlist_hash, 'count': len(playlist)})
+    except Exception:
+        logger.exception('Failed to return playlist')
+        return jsonify({'ok': False, 'error': 'server error'}), 500
+
+
 @app.route('/api/playlist_order', methods=['POST'])
-@login_required
 def api_playlist_order_post():
-    """Accept a JSON array of objects {name, repeats} and save as the playlist order."""
+    """Accept a JSON array of objects {name, repeats, [type]} and save as the playlist order."""
     try:
         data = request.get_json()
         if not isinstance(data, list):
@@ -540,19 +930,44 @@ def api_playlist_order_post():
 
         normalized = []
         for entry in data:
+            # Allow caller to supply string (name) or dict
             if isinstance(entry, str):
-                normalized.append({'name': entry, 'repeats': 1})
+                # detect youtube-like urls and tag appropriately
+                if entry.startswith('http') and ('youtube.com' in entry or 'youtu.be' in entry):
+                    normalized.append({'name': entry, 'type': 'youtube', 'repeats': 1})
+                else:
+                    normalized.append({'name': entry, 'repeats': 1})
             elif isinstance(entry, dict):
-                name = entry.get('name')
+                name = entry.get('name') or entry.get('url') or entry.get('filename')
                 if not name:
                     continue
                 try:
                     repeats = int(entry.get('repeats', 1))
                 except Exception:
                     repeats = 1
-                normalized.append({'name': name, 'repeats': max(1, repeats)})
 
-        ok = write_playlist(normalized)
+                # preserve type if provided, otherwise infer youtube by URL
+                etype = entry.get('type')
+                if not etype:
+                    if isinstance(name, str) and name.startswith('http') and ('youtube.com' in name or 'youtu.be' in name):
+                        etype = 'youtube'
+
+                item = {'name': name, 'repeats': max(1, repeats)}
+                if etype:
+                    item['type'] = etype
+                    # prefer explicit url key for youtube if available
+                    if etype == 'youtube':
+                        # keep both fields safe: some code expects item['url']
+                        item['url'] = entry.get('url') or name
+
+                normalized.append(item)
+
+        # Save to active playlist id if configured; otherwise legacy single file
+        active_id = get_active_playlist_id()
+        if active_id:
+            ok, _ = update_playlist(active_id, items=normalized)
+        else:
+            ok = write_playlist(normalized)
         if ok:
             return jsonify({'ok': True, 'playlist': normalized})
         else:
@@ -560,7 +975,6 @@ def api_playlist_order_post():
     except Exception:
         logger.exception('Failed to save playlist order')
         return jsonify({'ok': False, 'error': 'server error'}), 500
-
 
 @app.route('/control/start_web_player', methods=['POST'])
 @login_required
@@ -587,99 +1001,108 @@ def stop_web_player():
 @app.route('/control/start_signage_player', methods=['POST'])
 @login_required
 def start_signage_player():
-    if is_process_running(SIGNAGE_PLAYER_PID, 'player.py'):
-        flash('Signage player already running', 'error')
-        return redirect(url_for('dashboard'))
-    python = sys.executable or 'python3'
-    script = Path(__file__).parent / 'player.py'
-    ok = start_process([python, str(script)], SIGNAGE_PLAYER_PID)
-    flash('Signage player started' if ok else 'Failed to start signage player', 'success' if ok else 'error')
+    flash('HDMI player (player.py) is not deployed in this setup. Use Web Player instead.', 'info')
     return redirect(url_for('dashboard'))
 
 
 @app.route('/control/stop_signage_player', methods=['POST'])
 @login_required
 def stop_signage_player():
-    ok = stop_process(SIGNAGE_PLAYER_PID)
-    flash('Signage player stopped' if ok else 'Failed to stop signage player', 'success' if ok else 'error')
+    flash('HDMI player (player.py) is not deployed in this setup.', 'info')
     return redirect(url_for('dashboard'))
 
-@app.route('/upload/<content_type>', methods=['POST'])
+@app.route('/api/playlists', methods=['GET'])
 @login_required
-def upload_file(content_type):
-    start_time = time.time()
-    
-    try:
-        logger.info(f"Upload started for {content_type}")
-        
-        if 'file' not in request.files:
-            flash('No file selected', 'error')
-            return redirect(url_for('dashboard'))
-        
-        file = request.files['file']
-        
-        if file.filename == '':
-            flash('No file selected', 'error')
-            return redirect(url_for('dashboard'))
-        
-        if content_type == 'video':
-            target_dir = VIDEOS_DIR
-            allowed_ext = ALLOWED_VIDEO_EXTENSIONS
-        elif content_type == 'presentation':
-            target_dir = PRESENTATIONS_DIR
-            allowed_ext = ALLOWED_PPT_EXTENSIONS
-        else:
-            flash('Invalid content type', 'error')
-            return redirect(url_for('dashboard'))
-        
-        file_ext = Path(file.filename).suffix.lower()
-        if file_ext not in allowed_ext:
-            flash(f'Invalid file type. Allowed: {", ".join(allowed_ext)}', 'error')
-            return redirect(url_for('dashboard'))
-        
-        filename = secure_filename(file.filename)
-        filepath = target_dir / filename
-        
-        # NEW: If presentation exists, delete old cache first
-        if content_type == 'presentation' and filepath.exists():
-            cache_path = CACHE_DIR / filepath.stem
-            if cache_path.exists():
-                shutil.rmtree(cache_path)
-                logger.info(f"Deleted old cache for: {filename}")
-        
-        target_dir.mkdir(parents=True, exist_ok=True)
-        
-        logger.info(f"Saving {filename}...")
-        file.save(str(filepath))
-        
-        if filepath.exists():
-            elapsed = time.time() - start_time
-            file_size = get_file_size(filepath)
-            flash(f'✓ Uploaded: {filename} ({file_size}) in {elapsed:.1f}s', 'success')
-            logger.info(f"Upload complete: {filename} ({file_size}) in {elapsed:.1f}s")
-            # If this is a presentation, trigger conversion in background so player process
-            # doesn't need to be running. This ensures conversion happens even if the
-            # signage player (HDMI) is stopped.
-            if content_type == 'presentation':
-                try:
-                    python = sys.executable or 'python3'
-                    script = Path(__file__).parent / 'player.py'
-                    # spawn as detached background process
-                    subprocess.Popen([python, str(script), '--convert', str(filepath)],
-                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
-                    logger.info(f"Spawned background converter for: {filename}")
-                except Exception:
-                    logger.exception('Failed to spawn converter process')
-        else:
-            flash('Upload failed: File not saved', 'error')
-            logger.error(f"File not found after save: {filepath}")
-        
-    except Exception as e:
-        elapsed = time.time() - start_time
-        flash(f'Upload failed after {elapsed:.1f}s: {str(e)}', 'error')
-        logger.error(f"Upload error after {elapsed:.1f}s: {e}", exc_info=True)
-    
-    return redirect(url_for('dashboard'))
+def api_playlists_list():
+    store = read_playlists()
+    items = []
+    for pl in store.get('playlists', []):
+        items.append({
+            'id': pl.get('id'),
+            'name': pl.get('name'),
+            'itemCount': len(pl.get('items', [])),
+            'created_at': pl.get('created_at'),
+            'updated_at': pl.get('updated_at')
+        })
+    return jsonify({'playlists': items, 'active_playlist_id': store.get('active_playlist_id')})
+
+@app.route('/api/playlists', methods=['POST'])
+@login_required
+def api_playlists_create():
+    name = request.form.get('name') or (request.json and request.json.get('name'))
+    if not name:
+        return jsonify({'ok': False, 'error': 'name required'}), 400
+    ok, pl = create_playlist(name)
+    if not ok:
+        return jsonify({'ok': False, 'error': 'create failed'}), 500
+    return jsonify({'id': pl['id'], 'playlist': pl}), 201
+
+@app.route('/api/playlists/<pid>', methods=['GET'])
+@login_required
+def api_playlists_get(pid):
+    pl = get_playlist_by_id(pid)
+    if not pl:
+        return jsonify({'ok': False, 'error': 'not found'}), 404
+    phash = hashlib.md5(json.dumps(pl.get('items', []), sort_keys=True).encode()).hexdigest()
+    return jsonify({'playlist': pl, 'hash': phash})
+
+@app.route('/api/playlists/<pid>', methods=['PUT'])
+@login_required
+def api_playlists_put(pid):
+    payload = request.get_json(force=True)
+    name = payload.get('name')
+    items = payload.get('items')
+    ok, pl = update_playlist(pid, name=name, items=items)
+    if not ok or not pl:
+        return jsonify({'ok': False, 'error': 'update failed'}), 500
+    return jsonify({'playlist': pl})
+
+@app.route('/api/playlists/<pid>', methods=['DELETE'])
+@login_required
+def api_playlists_delete(pid):
+    ok = delete_playlist(pid)
+    return jsonify({'ok': ok})
+
+@app.route('/api/playlists/<pid>/reorder', methods=['POST'])
+@login_required
+def api_playlists_reorder(pid):
+    payload = request.get_json(force=True)
+    items = payload.get('items')
+    if not isinstance(items, list):
+        return jsonify({'ok': False, 'error': 'items required'}), 400
+    ok, pl = update_playlist(pid, items=items)
+    if not ok:
+        return jsonify({'ok': False, 'error': 'reorder failed'}), 500
+    return jsonify({'playlist': pl})
+
+@app.route('/api/playlists/<pid>/duplicate', methods=['POST'])
+@login_required
+def api_playlists_duplicate(pid):
+    ok, pl = duplicate_playlist(pid)
+    if not ok or not pl:
+        return jsonify({'ok': False, 'error': 'duplicate failed'}), 500
+    return jsonify({'id': pl['id'], 'playlist': pl}), 201
+
+@app.route('/api/playlists/set_active', methods=['POST'])
+@login_required
+def api_playlists_set_active():
+    pid = request.form.get('playlist_id') or (request.json and request.json.get('playlist_id'))
+    if not pid:
+        return jsonify({'ok': False, 'error': 'playlist_id required'}), 400
+    ok = set_active_playlist(pid)
+    if not ok:
+        return jsonify({'ok': False, 'error': 'set active failed'}), 400
+    return jsonify({'active_playlist_id': pid})
+
+@app.route('/api/playlists/reorder', methods=['POST'])
+@login_required
+def api_playlists_reorder_list():
+    payload = request.get_json(force=True)
+    order = payload.get('order')
+    if not isinstance(order, list):
+        return jsonify({'ok': False, 'error': 'order array required'}), 400
+    ok = reorder_playlists(order)
+    return jsonify({'ok': ok})
 
 @app.route('/delete/<content_type>/<filename>', methods=['POST'])
 @login_required
@@ -703,6 +1126,8 @@ def delete_file(content_type, filename):
             filepath.unlink()
             flash(f'✓ Deleted: {filename}', 'success')
             logger.info(f"Deleted {content_type}: {filename}")
+            # Ensure playlist no longer references this file
+            remove_from_playlist(filename)
         else:
             flash(f'File not found: {filename}', 'error')
             
