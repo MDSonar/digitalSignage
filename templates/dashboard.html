@@ -641,6 +641,29 @@
 
         <!-- small footer spacing -->
         <div style="height:18px"></div>
+
+        <!-- ============================================================
+             CLIENTS / RPi DISPLAYS
+             ============================================================ -->
+        <div class="card" id="clientsSection">
+            <div class="section-header" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+                <div style="display:flex;align-items:center;gap:10px">
+                    <span style="font-size:1.3rem">📺</span>
+                    <div>
+                        <h2 style="margin:0;font-size:1rem">Display Clients</h2>
+                        <div class="section-sub">Raspberry Pi devices connected to TVs</div>
+                    </div>
+                </div>
+                <button id="refreshClientsBtn" style="padding:7px 14px;background:rgba(86,99,235,0.08);color:var(--accent);border:1px solid rgba(86,99,235,0.18);border-radius:8px;font-weight:700;cursor:pointer;font-size:0.88rem">↻ Refresh</button>
+            </div>
+
+            <div id="clientsContainer" style="display:flex;flex-direction:column;gap:12px;margin-top:12px">
+                <div style="color:var(--muted);font-size:0.9rem;text-align:center;padding:18px 0">Loading clients…</div>
+            </div>
+        </div>
+
+        <!-- small footer spacing -->
+        <div style="height:18px"></div>
     </div>
 </div>
 
@@ -1245,6 +1268,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
         };
     }
 
+    // ---- Clients section ----
+    loadClients();
+    const refreshClientsBtn = document.getElementById('refreshClientsBtn');
+    if (refreshClientsBtn) refreshClientsBtn.addEventListener('click', loadClients);
+
 });
 window.addEventListener('pageshow', ()=>{ renderPlaylistEditorFromState(); });
 
@@ -1263,6 +1291,207 @@ function getBarClass(percent){
     if(percent >= 75) return 'warning';
     return '';
 }
+
+// ============================================================
+// CLIENTS / RPi DISPLAYS
+// ============================================================
+
+async function loadClients() {
+    const container = document.getElementById('clientsContainer');
+    if (!container) return;
+    try {
+        const [clientsRes, playlistsRes] = await Promise.all([
+            fetch('/api/clients'),
+            fetch('/api/playlists')
+        ]);
+        const clientsData = await clientsRes.json();
+        const playlistsData = await playlistsRes.json();
+        const playlists = playlistsData.playlists || [];
+        const clients = clientsData.clients || [];
+
+        if (clients.length === 0) {
+            container.innerHTML = `
+                <div style="text-align:center;padding:28px 0;color:var(--muted)">
+                    <div style="font-size:2rem;margin-bottom:8px">📡</div>
+                    <div style="font-weight:700;margin-bottom:4px">No clients registered yet</div>
+                    <div style="font-size:0.88rem">Run <code style="background:rgba(0,0,0,0.06);padding:2px 6px;border-radius:4px">rpi_agent.py</code> on your Raspberry Pi to register it here.</div>
+                </div>`;
+            return;
+        }
+
+        container.innerHTML = clients.map(c => renderClientCard(c, playlists)).join('');
+    } catch (e) {
+        console.error('Failed to load clients', e);
+        container.innerHTML = '<div style="color:#c41e3a;padding:12px">Failed to load clients. Check console.</div>';
+    }
+}
+
+function renderClientCard(c, playlists) {
+    const online = c.online;
+    const statusColor = online ? '#10b981' : '#9ca3af';
+    const statusLabel = online ? 'Online' : (c.seconds_ago ? `Offline ${formatSecondsAgo(c.seconds_ago)}` : 'Never seen');
+    const stats = c.stats || {};
+
+    const playlistOptions = playlists.map(p =>
+        `<option value="${p.id}" ${c.assigned_playlist_id === p.id ? 'selected' : ''}>${p.name}</option>`
+    ).join('');
+
+    // RPi / TV stats row
+    const piStats = buildStatsHtml(stats);
+
+    return `
+    <div style="background:#f9fafb;border:1px solid rgba(15,23,42,0.08);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px" data-client-id="${c.id}">
+        <!-- Header row -->
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
+                <span style="width:10px;height:10px;border-radius:50%;background:${statusColor};flex-shrink:0;box-shadow:0 0 0 3px ${statusColor}22"></span>
+                <div style="min-width:0">
+                    <div style="font-weight:700;font-size:0.97rem">${escHtml(c.name)}</div>
+                    <div style="font-size:0.82rem;color:var(--muted)">${escHtml(c.ip || '')} &bull; ${escHtml(c.hostname || c.mac || '')} &bull; ${statusLabel}</div>
+                </div>
+            </div>
+            <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap">
+                <button onclick="renameClient('${c.id}')" style="padding:5px 10px;background:#fff;border:1px solid rgba(15,23,42,0.12);border-radius:6px;font-size:0.82rem;cursor:pointer;font-weight:600">Rename</button>
+                <button onclick="sendCommand('${c.id}','tv_on')" title="TV On (CEC)" style="padding:5px 10px;background:#ecfdf5;color:#065f46;border:1px solid rgba(6,95,70,0.15);border-radius:6px;font-size:0.82rem;cursor:pointer;font-weight:700">TV On</button>
+                <button onclick="sendCommand('${c.id}','tv_off')" title="TV Off (CEC)" style="padding:5px 10px;background:#fff7ed;color:#92400e;border:1px solid rgba(146,64,14,0.15);border-radius:6px;font-size:0.82rem;cursor:pointer;font-weight:700">TV Off</button>
+                <button onclick="sendCommand('${c.id}','reboot')" title="Reboot RPi" style="padding:5px 10px;background:#fff0f0;color:#9b1c1c;border:1px solid rgba(155,28,28,0.12);border-radius:6px;font-size:0.82rem;cursor:pointer;font-weight:700">Reboot</button>
+                <button onclick="removeClient('${c.id}')" style="padding:5px 10px;background:var(--danger);color:#fff;border:none;border-radius:6px;font-size:0.82rem;cursor:pointer;font-weight:700">Remove</button>
+            </div>
+        </div>
+
+        <!-- Stats row -->
+        ${piStats ? `<div style="display:flex;gap:8px;flex-wrap:wrap">${piStats}</div>` : ''}
+
+        <!-- Playlist assignment -->
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="font-size:0.85rem;font-weight:600;color:var(--muted);white-space:nowrap">Playlist:</span>
+            <select id="pl-select-${c.id}" style="flex:1;min-width:140px;padding:6px 10px;border-radius:7px;border:1px solid rgba(15,23,42,0.12);font-size:0.88rem;background:#fff">
+                <option value="">— None —</option>
+                ${playlistOptions}
+            </select>
+            <button onclick="assignPlaylist('${c.id}')" style="padding:6px 14px;background:linear-gradient(90deg,var(--accent),var(--accent-2));color:#fff;border:none;border-radius:7px;font-weight:700;cursor:pointer;font-size:0.88rem">Apply</button>
+        </div>
+    </div>`;
+}
+
+function buildStatsHtml(stats) {
+    const items = [];
+    if (stats.cpu_percent !== undefined && stats.cpu_percent !== null)
+        items.push(statChip('CPU', Math.round(stats.cpu_percent) + '%', stats.cpu_percent));
+    if (stats.ram_percent !== undefined && stats.ram_percent !== null)
+        items.push(statChip('RAM', Math.round(stats.ram_percent) + '%', stats.ram_percent));
+    if (stats.disk_percent !== undefined && stats.disk_percent !== null)
+        items.push(statChip('Disk', Math.round(stats.disk_percent) + '%', stats.disk_percent));
+    if (stats.temp_c !== undefined && stats.temp_c !== null && stats.temp_c > 0)
+        items.push(statChip('Temp', stats.temp_c + '°C', stats.temp_c > 80 ? 95 : stats.temp_c > 70 ? 80 : 40));
+    if (stats.uptime_hours !== undefined && stats.uptime_hours !== null)
+        items.push(`<span style="background:rgba(86,99,235,0.07);color:var(--accent);padding:3px 9px;border-radius:99px;font-size:0.8rem;font-weight:700">↑ ${stats.uptime_hours}h</span>`);
+    if (stats.tv_power !== undefined) {
+        const tvStates = {
+            'on':          { bg: '#ecfdf5', color: '#065f46', label: 'TV on' },
+            'standby':     { bg: '#fff7ed', color: '#92400e', label: 'TV standby' },
+            'not_present': { bg: '#fffbeb', color: '#b45309', label: 'TV: CEC off?' },
+            'unknown':     { bg: '#f3f4f6', color: '#6b7280', label: 'TV unknown' },
+        };
+        const s = tvStates[stats.tv_power] || tvStates['unknown'];
+        items.push(`<span style="background:${s.bg};color:${s.color};padding:3px 9px;border-radius:99px;font-size:0.8rem;font-weight:700">${s.label}</span>`);
+    }
+    if (stats.hdmi_connected !== undefined) {
+        const hdmiColor = stats.hdmi_connected === 'connected' ? '#065f46' : (stats.hdmi_connected === 'disconnected' ? '#9b1c1c' : '#6b7280');
+        const hdmiBg    = stats.hdmi_connected === 'connected' ? '#ecfdf5' : (stats.hdmi_connected === 'disconnected' ? '#fff0f0' : '#f3f4f6');
+        const hdmiIcon  = stats.hdmi_connected === 'connected' ? '🔌' : (stats.hdmi_connected === 'disconnected' ? '⚠️' : '❓');
+        items.push(`<span style="background:${hdmiBg};color:${hdmiColor};padding:3px 9px;border-radius:99px;font-size:0.8rem;font-weight:700">${hdmiIcon} HDMI ${stats.hdmi_connected}</span>`);
+    }
+    return items.join('');
+}
+
+function statChip(label, value, percent) {
+    const color = percent >= 90 ? '#dc2626' : percent >= 75 ? '#b45309' : '#1e3a5f';
+    const bg    = percent >= 90 ? '#fff0f0' : percent >= 75 ? '#fffbeb' : 'rgba(86,99,235,0.06)';
+    return `<span style="background:${bg};color:${color};padding:3px 9px;border-radius:99px;font-size:0.8rem;font-weight:700">${label} ${value}</span>`;
+}
+
+function formatSecondsAgo(s) {
+    if (s < 60) return s + 's ago';
+    if (s < 3600) return Math.round(s/60) + 'm ago';
+    return Math.round(s/3600) + 'h ago';
+}
+
+function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function assignPlaylist(clientId) {
+    const sel = document.getElementById('pl-select-' + clientId);
+    const pid = sel ? sel.value : null;
+    try {
+        const res = await fetch('/api/clients/' + clientId + '/assign', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({playlist_id: pid || null}),
+            credentials: 'same-origin'
+        });
+        const j = await res.json();
+        if (!j.ok) throw new Error(j.error || 'failed');
+        alert(pid ? 'Playlist assigned!' : 'Playlist unassigned');
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
+}
+
+async function sendCommand(clientId, cmd) {
+    const labels = {tv_on:'Turn TV On', tv_off:'Turn TV Off (standby)', reboot:'Reboot Raspberry Pi'};
+    if (!confirm((labels[cmd] || cmd) + '?')) return;
+    try {
+        const res = await fetch('/api/clients/' + clientId + '/command', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({command: cmd}),
+            credentials: 'same-origin'
+        });
+        const j = await res.json();
+        if (!j.ok) throw new Error(j.error || 'failed');
+        alert('Command queued. RPi will execute it within 30s.');
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
+}
+
+async function renameClient(clientId) {
+    const name = prompt('New display name for this client:');
+    if (!name || !name.trim()) return;
+    try {
+        const res = await fetch('/api/clients/' + clientId + '/rename', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name: name.trim()}),
+            credentials: 'same-origin'
+        });
+        const j = await res.json();
+        if (!j.ok) throw new Error(j.error || 'failed');
+        loadClients();
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
+}
+
+async function removeClient(clientId) {
+    if (!confirm('Remove this client? The RPi will re-register next time it connects.')) return;
+    try {
+        const res = await fetch('/api/clients/' + clientId, {
+            method: 'DELETE',
+            credentials: 'same-origin'
+        });
+        const j = await res.json();
+        if (!j.ok) throw new Error(j.error || 'failed');
+        loadClients();
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
+}
+
+// Auto-refresh client list every 30s to reflect heartbeat updates
+setInterval(loadClients, 30000);
 
 function renderSystemStats(stats){
     const card = document.getElementById('systemStatsCard');

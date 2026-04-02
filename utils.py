@@ -78,6 +78,33 @@ def write_playlists(store: dict) -> bool:
         return False
 
 
+# ---------------------------------------------------------------------------
+# Clients (RPi devices)
+# ---------------------------------------------------------------------------
+
+CLIENTS_JSON = SIGNAGE_HOME / 'clients.json'
+
+
+def read_clients() -> dict:
+    """Return clients store, creating empty store if missing."""
+    try:
+        if CLIENTS_JSON.exists():
+            return json.loads(CLIENTS_JSON.read_text())
+    except Exception:
+        logger.exception('Failed to read clients.json')
+    now = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+    return {'clients': [], 'updated_at': now}
+
+
+def write_clients(store: dict) -> bool:
+    try:
+        store['updated_at'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+        return atomic_write(CLIENTS_JSON, json.dumps(store))
+    except Exception:
+        logger.exception('Failed to write clients.json')
+        return False
+
+
 def get_playlist_by_id(pid: str):
     try:
         store = read_playlists()

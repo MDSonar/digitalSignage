@@ -23,7 +23,8 @@ import hashlib
 from utils import (
     read_playlists, write_playlists, ensure_playlist_store, get_playlist_by_id,
     create_playlist, update_playlist, delete_playlist, duplicate_playlist,
-    set_active_playlist, get_active_playlist_id, reorder_playlists
+    set_active_playlist, get_active_playlist_id, reorder_playlists,
+    read_clients, write_clients
 )
 
 # Optional: psutil for system stats (graceful degradation if not installed)
@@ -1198,6 +1199,216 @@ def api_system_stats():
         return jsonify({'ok': True, 'stats': stats})
     except Exception:
         logger.exception('Failed to get system stats')
+        return jsonify({'ok': False, 'error': 'server error'}), 500
+
+
+# ---------------------------------------------------------------------------
+# Client (RPi) API — registration and heartbeat are public (no login_required)
+# so RPis can self-register without a browser session.
+# ---------------------------------------------------------------------------
+
+@app.route('/api/clients/register', methods=['POST'])
+def api_clients_register():
+    """RPi calls this on startup to register or re-register itself."""
+    try:
+        data = request.get_json(force=True) or {}
+        mac = data.get('mac', '').strip()
+        ip  = data.get('ip', request.remote_addr).strip()
+        name = data.get('name', data.get('hostname', 'RPi')).strip()
+        hostname = data.get('hostname', '').strip()
+        agent_version = data.get('agent_version', '1.0')
+
+        if not mac:
+            return jsonify({'ok': False, 'error': 'mac required'}), 400
+
+        store = read_clients()
+        clients = store.get('clients', [])
+        now = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+
+        existing = next((c for c in clients if c.get('mac') == mac), None)
+        if existing:
+            existing['ip'] = ip
+            existing['hostname'] = hostname
+            existing['agent_version'] = agent_version
+            existing['last_seen'] = now
+            client_id = existing['id']
+        else:
+            import uuid as _uuid
+            client_id = str(_uuid.uuid4())
+            clients.append({
+                'id': client_id,
+                'name': name,
+                'ip': ip,
+                'mac': mac,
+                'hostname': hostname,
+                'agent_version': agent_version,
+                'assigned_playlist_id': None,
+                'pending_command': None,
+                'registered_at': now,
+                'last_seen': now,
+                'stats': {}
+            })
+        store['clients'] = clients
+        write_clients(store)
+        logger.info(f'Client registered: {name} ({ip}) id={client_id}')
+        return jsonify({'ok': True, 'client_id': client_id})
+    except Exception:
+        logger.exception('Client register failed')
+        return jsonify({'ok': False, 'error': 'server error'}), 500
+
+
+@app.route('/api/clients/<cid>/heartbeat', methods=['POST'])
+def api_clients_heartbeat(cid):
+    """RPi posts stats here every ~30s."""
+    try:
+        data = request.get_json(force=True) or {}
+        store = read_clients()
+        client = next((c for c in store.get('clients', []) if c['id'] == cid), None)
+        if not client:
+            return jsonify({'ok': False, 'error': 'unknown client'}), 404
+        client['last_seen'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+        client['ip'] = data.get('ip', client.get('ip', ''))
+        client['stats'] = data.get('stats', client.get('stats', {}))
+        # Return any pending command so RPi can act on it
+        pending = client.get('pending_command')
+        client['pending_command'] = None   # clear after delivery
+        write_clients(store)
+        return jsonify({'ok': True, 'pending_command': pending})
+    except Exception:
+        logger.exception('Heartbeat failed')
+        return jsonify({'ok': False, 'error': 'server error'}), 500
+
+
+@app.route('/api/clients/<cid>/config', methods=['GET'])
+def api_clients_config(cid):
+    """RPi polls this to get its assigned playlist."""
+    try:
+        store = read_clients()
+        client = next((c for c in store.get('clients', []) if c['id'] == cid), None)
+        if not client:
+            return jsonify({'ok': False, 'error': 'unknown client'}), 404
+        pid = client.get('assigned_playlist_id')
+        playlist_name = None
+        if pid:
+            pl = get_playlist_by_id(pid)
+            playlist_name = pl.get('name') if pl else None
+        return jsonify({
+            'ok': True,
+            'client_id': cid,
+            'assigned_playlist_id': pid,
+            'playlist_name': playlist_name
+        })
+    except Exception:
+        logger.exception('Client config failed')
+        return jsonify({'ok': False, 'error': 'server error'}), 500
+
+
+@app.route('/api/clients', methods=['GET'])
+@login_required
+def api_clients_list():
+    """List all clients with online/offline status."""
+    try:
+        store = read_clients()
+        clients = store.get('clients', [])
+        now_ts = time.time()
+        result = []
+        for c in clients:
+            last_seen_str = c.get('last_seen')
+            seconds_ago = None
+            online = False
+            if last_seen_str:
+                try:
+                    import calendar
+                    t = time.strptime(last_seen_str, '%Y-%m-%dT%H:%M:%SZ')
+                    last_ts = calendar.timegm(t)
+                    seconds_ago = int(now_ts - last_ts)
+                    online = seconds_ago < 90
+                except Exception:
+                    pass
+            result.append({
+                **c,
+                'online': online,
+                'seconds_ago': seconds_ago
+            })
+        return jsonify({'ok': True, 'clients': result})
+    except Exception:
+        logger.exception('List clients failed')
+        return jsonify({'ok': False, 'error': 'server error'}), 500
+
+
+@app.route('/api/clients/<cid>/assign', methods=['POST'])
+@login_required
+def api_clients_assign(cid):
+    """Assign a playlist to a client."""
+    try:
+        data = request.get_json(force=True) or {}
+        pid = data.get('playlist_id')  # may be None to unassign
+        store = read_clients()
+        client = next((c for c in store.get('clients', []) if c['id'] == cid), None)
+        if not client:
+            return jsonify({'ok': False, 'error': 'unknown client'}), 404
+        client['assigned_playlist_id'] = pid
+        write_clients(store)
+        return jsonify({'ok': True})
+    except Exception:
+        logger.exception('Assign playlist failed')
+        return jsonify({'ok': False, 'error': 'server error'}), 500
+
+
+@app.route('/api/clients/<cid>/command', methods=['POST'])
+@login_required
+def api_clients_command(cid):
+    """Queue a CEC command for the RPi to pick up on next heartbeat."""
+    try:
+        data = request.get_json(force=True) or {}
+        cmd = data.get('command')  # e.g. 'tv_on', 'tv_off', 'reboot'
+        if not cmd:
+            return jsonify({'ok': False, 'error': 'command required'}), 400
+        store = read_clients()
+        client = next((c for c in store.get('clients', []) if c['id'] == cid), None)
+        if not client:
+            return jsonify({'ok': False, 'error': 'unknown client'}), 404
+        client['pending_command'] = cmd
+        write_clients(store)
+        return jsonify({'ok': True})
+    except Exception:
+        logger.exception('Queue command failed')
+        return jsonify({'ok': False, 'error': 'server error'}), 500
+
+
+@app.route('/api/clients/<cid>/rename', methods=['POST'])
+@login_required
+def api_clients_rename(cid):
+    try:
+        data = request.get_json(force=True) or {}
+        name = (data.get('name') or '').strip()
+        if not name:
+            return jsonify({'ok': False, 'error': 'name required'}), 400
+        store = read_clients()
+        client = next((c for c in store.get('clients', []) if c['id'] == cid), None)
+        if not client:
+            return jsonify({'ok': False, 'error': 'unknown client'}), 404
+        client['name'] = name
+        write_clients(store)
+        return jsonify({'ok': True})
+    except Exception:
+        logger.exception('Rename client failed')
+        return jsonify({'ok': False, 'error': 'server error'}), 500
+
+
+@app.route('/api/clients/<cid>', methods=['DELETE'])
+@login_required
+def api_clients_delete(cid):
+    try:
+        store = read_clients()
+        before = len(store.get('clients', []))
+        store['clients'] = [c for c in store.get('clients', []) if c['id'] != cid]
+        if len(store['clients']) == before:
+            return jsonify({'ok': False, 'error': 'not found'}), 404
+        write_clients(store)
+        return jsonify({'ok': True})
+    except Exception:
+        logger.exception('Delete client failed')
         return jsonify({'ok': False, 'error': 'server error'}), 500
 
 
