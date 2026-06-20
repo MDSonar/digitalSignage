@@ -20,8 +20,11 @@
         }
         
         body.playing {
-            cursor: none;
+            cursor: default;
             background: #000;
+        }
+        body.playing.cursor-hidden {
+            cursor: none;
         }
         
         /* Playlist Selection Screen */
@@ -137,23 +140,44 @@
             text-align: center;
         }
 
-        /* Switch playlist button */
-        #switch-playlist-btn {
+        /* Player overlay controls (back + fullscreen) */
+        #player-controls {
             position: fixed;
-            top: 16px;
-            right: 16px;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
             z-index: 1000;
-            padding: 12px 16px;
-            border: none;
-            border-radius: 10px;
-            background: rgba(255,255,255,0.12);
-            color: #fff;
-            font-weight: 800;
-            cursor: pointer;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.25);
-            backdrop-filter: blur(6px);
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
         }
-        #switch-playlist-btn:hover { background: rgba(255,255,255,0.18); }
+        #player-controls.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .player-ctrl-btn {
+            width: 52px;
+            height: 52px;
+            border: none;
+            border-radius: 14px;
+            background: rgba(15,23,42,0.75);
+            color: #fff;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            backdrop-filter: blur(10px);
+            transition: background 0.15s, transform 0.12s;
+        }
+        .player-ctrl-btn:hover {
+            background: rgba(86,99,235,0.85);
+            transform: scale(1.08);
+        }
+
     </style>
 </head>
 <body>
@@ -175,11 +199,23 @@
         </div>
     </div>
 
-    <button id="switch-playlist-btn" class="hidden">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M19 12H5M12 19l-7-7 7-7"/>
-        </svg>
-    </button>
+    <!-- Player overlay: back + fullscreen — hidden until pointer moves -->
+    <div id="player-controls" class="hidden">
+        <button class="player-ctrl-btn" id="switch-playlist-btn" title="Back to playlist selection">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+        </button>
+        <button class="player-ctrl-btn" id="fullscreen-btn" title="Toggle fullscreen">
+            <svg id="fs-icon-enter" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/>
+            </svg>
+            <svg id="fs-icon-exit" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+                <path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3"/>
+            </svg>
+        </button>
+    </div>
+
 
     <script src="https://www.youtube.com/iframe_api"></script>
 
@@ -295,7 +331,8 @@
             document.body.classList.remove('playing');
             playerContainer.classList.add('hidden');
             playlistSelection.classList.remove('hidden');
-            switchBtn.classList.add('hidden');
+            playerControls.classList.add('hidden');
+            stopActivityTimer();
             selectedPlaylistId = null;
             selectedSource = null;
             playlist = [];
@@ -321,20 +358,22 @@
             playlistSelection.classList.add('hidden');
             playerContainer.classList.remove('hidden');
             document.body.classList.add('playing');
-            switchBtn.classList.remove('hidden');
-            
-            // Try fullscreen
-            try {
-                const elem = document.documentElement;
-                if (elem.requestFullscreen) {
-                    elem.requestFullscreen().catch(e => console.log('Fullscreen denied'));
-                } else if (elem.webkitRequestFullscreen) {
-                    elem.webkitRequestFullscreen();
-                }
-            } catch (e) {
-                console.log('Fullscreen not available:', e);
+            playerControls.classList.remove('hidden');
+            startActivityTimer();
+
+            // Enter fullscreen on first playback start only
+            if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                try {
+                    const elem = document.documentElement;
+                    if (elem.requestFullscreen) {
+                        elem.requestFullscreen().catch(() => {});
+                    } else if (elem.webkitRequestFullscreen) {
+                        elem.webkitRequestFullscreen();
+                    }
+                } catch (_) {}
             }
-            
+            updateFsIcon();
+
             // Start player loop
             startPlayer();
         }
@@ -349,6 +388,8 @@
         let playlist = [];
         let currentIndex = 0;
         let playlistHash = null;
+        let scheduledKey = '';     // tracks which items are currently scheduled (for change detection)
+        let lastSchedulerEnabled = false;
         let isPlaying = false;
         let fetchInterval = null;
         let youtubePlayer = null;
@@ -358,15 +399,76 @@
         let pendingYoutubeDurationSec = null;
         let youtubeStartTs = null;
         let youtubeMaxMs = null;
+        let imageTimeout = null;
         
         const videoPlayer = document.getElementById('video-player');
         const imagePlayer = document.getElementById('image-player');
         const loading = document.getElementById('loading');
         const youtubeContainer = document.getElementById('youtube-container');
         const youtubeIframe = document.getElementById('youtube-player');
+        const playerControls = document.getElementById('player-controls');
         const switchBtn = document.getElementById('switch-playlist-btn');
+        const fullscreenBtn = document.getElementById('fullscreen-btn');
+        const fsIconEnter = document.getElementById('fs-icon-enter');
+        const fsIconExit = document.getElementById('fs-icon-exit');
+
         if (switchBtn) {
             switchBtn.addEventListener('click', () => resetSelection(true));
+        }
+
+        // ── Fullscreen toggle ──────────────────────────────────────────────
+        function updateFsIcon() {
+            const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+            if (fsIconEnter) fsIconEnter.style.display = isFs ? 'none'  : '';
+            if (fsIconExit)  fsIconExit.style.display  = isFs ? ''     : 'none';
+            if (fullscreenBtn) fullscreenBtn.title = isFs ? 'Exit fullscreen' : 'Enter fullscreen';
+        }
+        document.addEventListener('fullscreenchange', updateFsIcon);
+        document.addEventListener('webkitfullscreenchange', updateFsIcon);
+
+        if (fullscreenBtn) {
+            fullscreenBtn.addEventListener('click', () => {
+                if (document.fullscreenElement || document.webkitFullscreenElement) {
+                    (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+                } else {
+                    const el = document.documentElement;
+                    if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+                    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+                }
+            });
+        }
+
+        // ── Cursor + controls auto-hide after 5 s of no movement ──────────
+        let activityTimer = null;
+
+        function showActivity() {
+            document.body.classList.remove('cursor-hidden');
+            if (playerControls && document.body.classList.contains('playing')) {
+                playerControls.classList.add('visible');
+            }
+            clearTimeout(activityTimer);
+            activityTimer = setTimeout(hideActivity, 5000);
+        }
+
+        function hideActivity() {
+            document.body.classList.add('cursor-hidden');
+            if (playerControls) playerControls.classList.remove('visible');
+        }
+
+        function startActivityTimer() {
+            document.addEventListener('mousemove', showActivity);
+            document.addEventListener('mousedown', showActivity);
+            document.addEventListener('touchstart', showActivity);
+            showActivity(); // show immediately when playback starts
+        }
+
+        function stopActivityTimer() {
+            clearTimeout(activityTimer);
+            document.removeEventListener('mousemove', showActivity);
+            document.removeEventListener('mousedown', showActivity);
+            document.removeEventListener('touchstart', showActivity);
+            document.body.classList.remove('cursor-hidden');
+            if (playerControls) playerControls.classList.remove('visible');
         }
         
         function startPlayer() {
@@ -412,45 +514,132 @@
             playlist = [];
             currentIndex = 0;
             playlistHash = null;
+            scheduledKey = '';
+            lastSchedulerEnabled = false;
         }
         
+        function stopCurrentMedia() {
+            try { videoPlayer.pause(); } catch (e) {}
+            videoPlayer.classList.add('hidden');
+            try { imagePlayer.classList.add('hidden'); } catch (e) {}
+            if (imageTimeout) { clearTimeout(imageTimeout); imageTimeout = null; }
+            try {
+                youtubeContainer.classList.add('hidden');
+                youtubeIframe.src = '';
+                if (youtubePlayer && youtubePlayer.stopVideo) youtubePlayer.stopVideo();
+            } catch (e) {}
+            if (youtubeEndTimer) { clearTimeout(youtubeEndTimer); youtubeEndTimer = null; }
+            youtubeStartTs = null;
+            youtubeMaxMs = null;
+            pendingYoutubeId = null;
+            pendingYoutubeDurationSec = null;
+            isPlaying = false;
+        }
+
+        // ── Client-side schedule evaluation ──────────────────────────────────
+        // Evaluates which source items should play right now using the display
+        // device's local clock. This avoids server timezone issues entirely.
+        function evalSchedule(rawItems, schedulerEnabled, schedulerDefault) {
+            if (!schedulerEnabled) return null; // null = play all items
+
+            const now    = new Date();
+            const today  = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+            const nowMin = now.getHours() * 60 + now.getMinutes();
+
+            const active = new Set();
+            for (const item of (rawItems || [])) {
+                // Support both legacy single-object schedule and new array format
+                const schedules = Array.isArray(item.schedule)
+                    ? item.schedule
+                    : (item.schedule ? [item.schedule] : []);
+                for (const sched of schedules) {
+                    if (!sched || !sched.recurrence) continue;
+                    try {
+                        const [sh, sm] = sched.start_time.split(':').map(Number);
+                        const [eh, em] = sched.end_time.split(':').map(Number);
+                        const startMin = sh * 60 + sm;
+                        const endMin   = eh * 60 + em;
+                        let hit = false;
+                        if (sched.recurrence === 'daily' && nowMin >= startMin && nowMin < endMin) hit = true;
+                        else if (sched.recurrence === 'once' && sched.date === today &&
+                                 nowMin >= startMin && nowMin < endMin) hit = true;
+                        if (hit) { active.add(item.name); break; } // one window match is enough
+                    } catch (_) {}
+                }
+            }
+
+            if (active.size > 0) {
+                // Priority: if scheduler_default is active → play only that
+                if (schedulerDefault && schedulerDefault.name && active.has(schedulerDefault.name)) {
+                    return new Set([schedulerDefault.name]);
+                }
+                // Multiple items active with no default → first in sequence order wins
+                if (active.size > 1) {
+                    for (const item of (rawItems || [])) {
+                        if (active.has(item.name)) return new Set([item.name]);
+                    }
+                }
+                return active;
+            }
+
+            // Nothing scheduled now — use scheduler_default if set
+            if (schedulerDefault && schedulerDefault.name) {
+                return new Set([schedulerDefault.name]);
+            }
+
+            return null; // no match, no default → play all as fallback
+        }
+
+        function applyScheduleFilter(allItems, scheduledNames) {
+            if (!scheduledNames) return allItems;
+            const filtered = allItems.filter(i => scheduledNames.has(i.source_name || i.name));
+            return filtered.length > 0 ? filtered : allItems; // safety: never go empty
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
         async function fetchPlaylist() {
             try {
-                // Fetch playlist with explicit ID
-                const url = selectedPlaylistId ? 
-                    `/api/playlist?playlist_id=${encodeURIComponent(selectedPlaylistId)}` : 
+                const url = selectedPlaylistId ?
+                    `/api/playlist?playlist_id=${encodeURIComponent(selectedPlaylistId)}` :
                     '/api/playlist';
-                
+
                 const response = await fetch(url);
-                
-                if (!response.ok) {
-                    throw new Error('API error');
-                }
-                
+                if (!response.ok) throw new Error('API error');
+
                 const data = await response.json();
-                
-                // Check if playlist changed
-                if (data.hash !== playlistHash) {
-                    console.log('Playlist updated:', playlist.length === 0 ? 'first load' : 'content changed');
+
+                // Evaluate which items to play RIGHT NOW using client's local clock
+                const allItems = data.playlist || [];
+                const scheduledNames = evalSchedule(
+                    data.raw_items, data.scheduler_enabled, data.scheduler_default
+                );
+                const scheduled = applyScheduleFilter(allItems, scheduledNames);
+
+                // Build a change-detection key: playlist content + which items are scheduled
+                const newScheduledKey = (data.hash || '') + '|' +
+                    scheduled.map(i => (i.source_name || i.name) + ':' + i.url).join(',');
+
+                if (newScheduledKey !== scheduledKey) {
+                    console.log('Schedule/playlist changed — updating player');
                     const wasEmpty = playlist.length === 0;
-                    playlist = data.playlist || [];
-                    playlistHash = data.hash;
-                    
+                    playlist      = scheduled;
+                    playlistHash  = data.hash;
+                    scheduledKey  = newScheduledKey;
+
                     if (playlist.length > 0) {
                         loading.classList.add('hidden');
-                        // Only start playback if this is the first load (playlist was empty)
-                        if (wasEmpty) {
-                            currentIndex = 0;
-                            isPlaying = false;
-                            playNext();
-                        }
-                        // If playlist changed during playback, the next item will pick up new content
+                        // Restart playback when schedule changes or on first load
+                        currentIndex = 0;
+                        stopCurrentMedia();
+                        playNext();
                     } else {
-                        loading.textContent = 'No content in playlist';
+                        loading.textContent = 'No content scheduled';
                         loading.classList.remove('hidden');
                     }
                 }
-                
+
+                lastSchedulerEnabled = !!data.scheduler_enabled;
+
             } catch (error) {
                 console.error('Fetch error:', error);
                 loading.textContent = 'Connection error';
@@ -483,9 +672,11 @@
                 videoPlayer.classList.add('hidden');
                 imagePlayer.classList.remove('hidden');
                 imagePlayer.src = item.url;
-                
-                // FIXED: Use setTimeout safely
-                setTimeout(() => {
+
+                // Track timeout so stopCurrentMedia() can cancel it
+                if (imageTimeout) clearTimeout(imageTimeout);
+                imageTimeout = setTimeout(() => {
+                    imageTimeout = null;
                     isPlaying = false;
                     nextItem();
                 }, (item.duration || 10) * 1000);

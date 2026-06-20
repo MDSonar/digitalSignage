@@ -3,12 +3,40 @@ import json
 import time
 import uuid
 import logging
+import os
+
+# Load .env so TZ and other variables are available when running locally or
+# when docker-compose env_file hasn't injected them yet.
+try:
+    from dotenv import load_dotenv as _load_dotenv
+    _load_dotenv(Path(__file__).parent / '.env', override=False)
+except Exception:
+    pass
 
 logger = logging.getLogger(__name__)
 
 SIGNAGE_HOME = Path.home() / 'signage'
 PLAYLISTS_JSON = SIGNAGE_HOME / 'playlists.json'
 LEGACY_PLAYLIST_JSON = SIGNAGE_HOME / 'playlist.json'
+CONFIG_JSON = SIGNAGE_HOME / 'signage_config.json'
+
+
+def read_config() -> dict:
+    try:
+        if CONFIG_JSON.exists():
+            return json.loads(CONFIG_JSON.read_text())
+    except Exception:
+        logger.exception('Failed to read config')
+    return {}
+
+
+def write_config(data: dict) -> bool:
+    try:
+        CONFIG_JSON.parent.mkdir(parents=True, exist_ok=True)
+        return atomic_write(CONFIG_JSON, json.dumps(data))
+    except Exception:
+        logger.exception('Failed to write config')
+        return False
 
 
 def atomic_write(path: Path, data: str) -> bool:
@@ -50,10 +78,18 @@ def ensure_playlist_store():
                 return atomic_write(PLAYLISTS_JSON, json.dumps(data))
     except Exception:
         logger.exception('Failed to migrate legacy playlist')
-    # If no legacy, initialize empty store
+    # If no legacy, initialize with default 'everything' playlist
     try:
         now = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
-        data = {'version': 2, 'playlists': [], 'active_playlist_id': None, 'updated_at': now}
+        default_pl = {
+            'id': 'everything',
+            'name': 'everything',
+            'items': [],
+            'created_at': now,
+            'updated_at': now,
+            'meta': {}
+        }
+        data = {'version': 2, 'playlists': [default_pl], 'active_playlist_id': 'everything', 'updated_at': now}
         return atomic_write(PLAYLISTS_JSON, json.dumps(data))
     except Exception:
         logger.exception('Failed to init playlist store')
@@ -63,7 +99,22 @@ def ensure_playlist_store():
 def read_playlists():
     try:
         ensure_playlist_store()
-        return json.loads(PLAYLISTS_JSON.read_text())
+        store = json.loads(PLAYLISTS_JSON.read_text())
+        # Ensure at least the default 'everything' playlist always exists
+        if not store.get('playlists'):
+            now = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+            default_pl = {
+                'id': 'everything',
+                'name': 'everything',
+                'items': [],
+                'created_at': now,
+                'updated_at': now,
+                'meta': {}
+            }
+            store['playlists'] = [default_pl]
+            store['active_playlist_id'] = 'everything'
+            write_playlists(store)
+        return store
     except Exception:
         logger.exception('Failed to read playlists.json')
         return {'version': 2, 'playlists': [], 'active_playlist_id': None, 'updated_at': None}
@@ -133,7 +184,10 @@ def create_playlist(name: str, items=None):
         return False, None
 
 
-def update_playlist(pid: str, name=None, items=None):
+_UNSET = object()
+
+
+def update_playlist(pid: str, name=None, items=None, scheduler_enabled=_UNSET, scheduler_default=_UNSET):
     try:
         store = read_playlists()
         changed = False
@@ -144,6 +198,12 @@ def update_playlist(pid: str, name=None, items=None):
                     changed = True
                 if items is not None:
                     pl['items'] = items
+                    changed = True
+                if scheduler_enabled is not _UNSET:
+                    pl['scheduler_enabled'] = scheduler_enabled
+                    changed = True
+                if scheduler_default is not _UNSET:
+                    pl['scheduler_default'] = scheduler_default
                     changed = True
                 if changed:
                     pl['updated_at'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
@@ -200,6 +260,64 @@ def get_active_playlist_id():
         return store.get('active_playlist_id')
     except Exception:
         return None
+
+def _get_local_now():
+    """Return current datetime in the configured timezone.
+    Priority: signage_config.json > TZ env var > system local time.
+    """
+    from datetime import datetime
+    # config file wins (set from dashboard UI)
+    cfg = read_config()
+    tz_name = (cfg.get('timezone') or os.environ.get('TZ', '')).strip()
+    if tz_name and tz_name.upper() != 'UTC':
+        try:
+            from zoneinfo import ZoneInfo
+            return datetime.now(ZoneInfo(tz_name)).replace(tzinfo=None)
+        except Exception:
+            pass
+    return datetime.now()
+
+
+def get_scheduled_items(playlist: dict, now=None) -> list:
+    """Return items to play right now for a scheduler-enabled playlist.
+
+    Filters items whose schedule window covers the current time. If nothing
+    matches, returns [scheduler_default] when set, else all items as fallback.
+    Items with schedule=None are skipped when the scheduler is on.
+    """
+    if now is None:
+        now = _get_local_now()
+
+    active = []
+    for item in playlist.get('items', []):
+        sched = item.get('schedule')
+        if not sched or not sched.get('recurrence'):
+            continue
+        try:
+            start = datetime.strptime(sched['start_time'], '%H:%M').time()
+            end   = datetime.strptime(sched['end_time'],   '%H:%M').time()
+        except (KeyError, ValueError):
+            continue
+        in_window = start <= now.time() < end
+        if sched['recurrence'] == 'daily' and in_window:
+            active.append(item)
+        elif sched['recurrence'] == 'once':
+            try:
+                target = datetime.strptime(sched['date'], '%Y-%m-%d').date()
+                if target == now.date() and in_window:
+                    active.append(item)
+            except (KeyError, ValueError):
+                pass
+
+    if active:
+        return active
+
+    default = playlist.get('scheduler_default')
+    if default:
+        return [default]
+
+    return playlist.get('items', [])
+
 
 def reorder_playlists(id_order: list) -> bool:
     try:

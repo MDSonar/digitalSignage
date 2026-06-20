@@ -14,6 +14,9 @@ services:
       - signage-data:/root/signage
       # Mount logo folder (optional - add your logo here)
       - ./logo:/root/signage/logo:ro
+    env_file:
+      - path: .env
+        required: false
     environment:
       - FLASK_ENV=production
       - PYTHONUNBUFFERED=1
@@ -39,6 +42,9 @@ services:
       - signage-content:/root/signage/content:ro
       - signage-cache:/root/signage/cache:ro
       - signage-data:/root/signage:ro
+    env_file:
+      - path: .env
+        required: false
     environment:
       - FLASK_ENV=production
       - PYTHONUNBUFFERED=1

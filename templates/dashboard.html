@@ -97,6 +97,12 @@
         .files-list{display:flex;flex-direction:column;gap:10px}
         .file-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px;border-radius:10px;border:1px solid rgba(15,23,42,0.04);background:linear-gradient(180deg, rgba(255,255,255,0.6), rgba(250,250,250,0.6));transition:transform .12s var(--easing)}
         .file-item:hover{transform:translateY(-2px)}
+        .file-item.now-playing-item{border-color:rgba(34,197,94,0.35);background:linear-gradient(180deg,rgba(240,253,244,0.9),rgba(220,252,231,0.6))}
+
+        .now-playing-dot{width:10px;height:10px;border-radius:50%;background:#22c55e;display:inline-block;flex-shrink:0;box-shadow:0 0 0 0 rgba(34,197,94,0.5);animation:pulse-green 2s infinite}
+        @keyframes pulse-green{0%{box-shadow:0 0 0 0 rgba(34,197,94,0.5)}70%{box-shadow:0 0 0 8px rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}
+        .now-playing-label{font-size:0.72rem;font-weight:700;color:#16a34a;background:rgba(34,197,94,0.1);padding:2px 7px;border-radius:20px;white-space:nowrap}
+        .default-active-badge{font-size:0.72rem;font-weight:700;color:#d97706;background:rgba(245,158,11,0.1);padding:2px 7px;border-radius:20px;margin-left:8px}
         .file-info{display:flex;flex-direction:column;min-width:0}
         .file-name{font-weight:700;color:var(--text);word-break:break-word}
         .file-size{color:var(--muted);font-size:0.86rem}
@@ -170,6 +176,58 @@
 
         /* small utility */
         .muted{color:var(--muted);font-size:0.88rem}
+
+        /* ── Timeline Scheduler ─────────────────────────────────── */
+        .tl-tabs{display:flex;gap:6px;margin-bottom:10px}
+        .tl-tab{padding:6px 14px;border-radius:8px;border:1px solid rgba(15,23,42,0.1);background:transparent;font-size:0.85rem;font-weight:600;cursor:pointer;color:var(--muted);transition:all .15s}
+        .tl-tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+        .tl-outer{display:flex;flex-direction:column;gap:0;border:1px solid rgba(15,23,42,0.08);border-radius:10px;overflow:hidden;background:#fff}
+        .tl-top{display:flex}
+        .tl-label-col{width:130px;flex-shrink:0;border-right:1px solid rgba(15,23,42,0.07);background:#f8fafc}
+        .tl-label-col-header{height:28px;display:flex;align-items:center;padding:0 10px;font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid rgba(15,23,42,0.07)}
+        .tl-lane-label{height:44px;display:flex;align-items:center;padding:0 5px 0 8px;font-size:0.78rem;font-weight:600;color:var(--text);border-bottom:1px solid rgba(15,23,42,0.05);gap:4px}
+        .tl-lane-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .tl-add-instance-btn{flex-shrink:0;width:18px;height:18px;border-radius:4px;border:1px solid rgba(15,23,42,0.15);background:rgba(86,99,235,0.08);color:var(--accent);font-size:0.9rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:800;padding:0;transition:background .12s,color .12s}
+        .tl-add-instance-btn:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+        .tl-right{flex:1;overflow:hidden;position:relative}
+        .tl-ruler{position:relative;height:28px;background:#f8fafc;border-bottom:2px solid rgba(15,23,42,0.1);overflow:hidden}
+        .tl-ruler-label{position:absolute;transform:translateX(-50%);font-size:0.68rem;font-weight:700;color:var(--muted);top:6px;pointer-events:none;white-space:nowrap}
+        .tl-ruler-tick{position:absolute;width:1px;background:rgba(15,23,42,0.08);top:18px;bottom:0}
+        .tl-ruler-tick.major{background:rgba(15,23,42,0.2);top:14px}
+        .tl-tracks-wrap{position:relative;overflow:hidden}
+        .tl-lane{position:relative;height:44px;border-bottom:1px solid rgba(15,23,42,0.05);background:#fafbfc}
+        .tl-lane:hover{background:#f5f7ff}
+        .tl-gridline{position:absolute;top:0;bottom:0;width:1px;background:rgba(15,23,42,0.05);pointer-events:none}
+        .tl-gridline.major{background:rgba(15,23,42,0.1)}
+        .tl-block{position:absolute;top:5px;height:34px;border-radius:6px;cursor:grab;display:flex;align-items:center;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,0.15);transition:box-shadow .1s;min-width:4px;user-select:none}
+        .tl-block:active{cursor:grabbing;box-shadow:0 4px 12px rgba(0,0,0,0.25)}
+        .tl-block.tl-block-active{box-shadow:0 0 0 2px #22c55e,0 4px 12px rgba(34,197,94,0.3)}
+        .tl-block-inner{flex:1;padding:0 8px;font-size:0.72rem;font-weight:700;color:#fff;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;text-shadow:0 1px 2px rgba(0,0,0,0.3)}
+        .tl-handle{position:absolute;top:0;bottom:0;width:8px;cursor:ew-resize;z-index:3;background:rgba(255,255,255,0.25);transition:background .1s}
+        .tl-handle:hover{background:rgba(255,255,255,0.45)}
+        .tl-handle-left{left:0;border-radius:6px 0 0 6px}
+        .tl-handle-right{right:0;border-radius:0 6px 6px 0}
+        .tl-remove-btn{position:absolute;right:10px;top:50%;transform:translateY(-50%);width:18px;height:18px;border-radius:50%;background:rgba(255,255,255,0.25);color:#fff;font-size:14px;line-height:1;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;z-index:4;padding:0}
+        .tl-block:hover .tl-remove-btn{opacity:1}
+        .tl-remove-btn:hover{background:rgba(220,38,38,0.7)}
+        .tl-nowline{position:absolute;top:0;bottom:0;width:2px;background:#22c55e;pointer-events:none;z-index:20;transform:translateX(-50%)}
+        .tl-nowline::before{content:'';position:absolute;top:-1px;left:50%;transform:translateX(-50%);width:8px;height:8px;border-radius:50%;background:#22c55e}
+        .tl-add-btn{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:0.75rem;padding:4px 12px;border-radius:6px;border:1px dashed rgba(86,99,235,0.35);background:transparent;color:var(--accent);cursor:pointer;white-space:nowrap;font-weight:600}
+        .tl-add-btn:hover{background:rgba(86,99,235,0.06)}
+        .tl-placeholder{position:absolute;top:50%;left:8px;transform:translateY(-50%);font-size:0.72rem;color:var(--muted);pointer-events:none}
+        .tl-sched-badge{display:inline-flex;align-items:center;gap:4px;font-size:0.75rem;font-weight:700;padding:2px 8px;border-radius:10px;margin-top:3px}
+        .tl-unscheduled-hint{font-size:0.78rem;color:var(--muted);margin-top:6px}
+        .tl-once-date-wrap{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:0.85rem;color:var(--muted)}
+        .tl-once-date-wrap input[type=date]{padding:5px 10px;border-radius:8px;border:1px solid rgba(15,23,42,0.1);font-size:0.85rem;color:var(--text)}
+        .tl-zoom-bar{display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:6px 10px;background:#f8fafc;border-radius:8px;border:1px solid rgba(15,23,42,0.07);flex-wrap:wrap}
+        .tl-zoom-btn{padding:3px 10px;border-radius:6px;border:1px solid rgba(15,23,42,0.12);background:#fff;color:var(--text);cursor:pointer;font-size:0.82rem;font-weight:600;line-height:1.6;transition:background .15s,color .15s}
+        .tl-zoom-btn:hover:not(:disabled){background:var(--accent);color:#fff;border-color:var(--accent)}
+        .tl-zoom-btn:disabled{opacity:0.38;cursor:default}
+        .tl-zoom-label{font-size:0.8rem;font-weight:600;color:var(--muted);min-width:64px;text-align:center}
+        #tlZoomSlider{flex:1;max-width:130px;accent-color:var(--accent);cursor:pointer}
+        .tl-minimap{position:relative;height:14px;background:#eef0f3;border-radius:4px;border:1px solid rgba(15,23,42,0.08);overflow:hidden;cursor:pointer;margin-top:4px}
+        .tl-minimap-item{position:absolute;top:2px;bottom:2px;border-radius:2px;opacity:0.6}
+        .tl-minimap-window{position:absolute;top:0;bottom:0;background:rgba(99,102,241,0.18);border-left:2px solid #6366f1;border-right:2px solid #6366f1;pointer-events:none}
 
         /* System stats card styling */
         #systemStatsCard {
@@ -361,24 +419,44 @@
                 <h1>🖥️ Litmus Signage Dashboard</h1>
                 <div class="user-info">Logged in as: {{ username }}</div>
             </div>
-            <!-- Player controls in header -->
-            <form action="{{ url_for('send_command') }}" method="POST" class="control-form" aria-label="Player controls" style="display:flex;gap:8px;align-items:center">
-                <input type="hidden" name="target" value="web">
-                <button class="icon-btn ghost" aria-label="Previous" name="action" value="prev" title="Previous" type="submit" style="color:white;padding:6px">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M11.5 12L20 18V6L11.5 12Z" fill="currentColor" /><path d="M4 18V6L9.5 12L4 18Z" fill="currentColor" /></svg>
-                </button>
-                <button class="icon-btn" aria-label="Play" name="action" value="play" title="Play" type="submit" style="color:white;padding:6px">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M8 5v14l11-7L8 5z" /></svg>
-                </button>
-                <button class="icon-btn pause" aria-label="Pause" name="action" value="pause" title="Pause" type="submit" style="color:white;padding:6px">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="6" y="5" width="4" height="14" fill="currentColor" /><rect x="14" y="5" width="4" height="14" fill="currentColor" /></svg>
-                </button>
-                <button class="icon-btn ghost" aria-label="Next" name="action" value="next" title="Next" type="submit" style="color:white;padding:6px">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M3 6v12l9-6-9-6z" fill="currentColor" /><path d="M12 6v12l9-6-9-6z" fill="currentColor" /></svg>
-                </button>
-            </form>
             <a href="{{ url_for('logout') }}" class="logout-btn" aria-label="Logout">Logout</a>
         </header>
+
+        <!-- Global timezone bar — always visible, not tied to scheduler -->
+        <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:7px 18px;background:rgba(255,255,255,0.92);border-bottom:1px solid rgba(15,23,42,0.07);font-size:0.82rem">
+            <span style="color:var(--muted);font-weight:600">🕐</span>
+            <span id="serverTimeDisplay" style="font-weight:700;color:var(--text)">--:--</span>
+            <span id="serverTzDisplay" style="color:var(--muted);font-size:0.78rem;padding:1px 6px;background:#e2e8f0;border-radius:4px"></span>
+            <span id="tzMismatchWarn" style="color:#b45309;background:#fef3c7;padding:2px 8px;border-radius:4px;font-size:0.78rem;display:none">⚠️ Browser time differs</span>
+            <span style="flex:1;min-width:8px"></span>
+            <label style="color:var(--muted);font-weight:600;white-space:nowrap">Timezone:</label>
+            <select id="tzSelect" style="padding:3px 8px;border-radius:6px;border:1px solid rgba(15,23,42,0.12);font-size:0.82rem;color:var(--text);background:#fff">
+                <option value="Asia/Kolkata">Asia/Kolkata (IST +5:30)</option>
+                <option value="Asia/Dubai">Asia/Dubai (GST +4)</option>
+                <option value="Asia/Singapore">Asia/Singapore (SGT +8)</option>
+                <option value="Asia/Shanghai">Asia/Shanghai (CST +8)</option>
+                <option value="Asia/Tokyo">Asia/Tokyo (JST +9)</option>
+                <option value="Asia/Seoul">Asia/Seoul (KST +9)</option>
+                <option value="Australia/Sydney">Australia/Sydney (AEST)</option>
+                <option value="Pacific/Auckland">Pacific/Auckland (NZST)</option>
+                <option value="Europe/London">Europe/London (GMT/BST)</option>
+                <option value="Europe/Paris">Europe/Paris (CET/CEST)</option>
+                <option value="Europe/Berlin">Europe/Berlin (CET/CEST)</option>
+                <option value="Europe/Moscow">Europe/Moscow (MSK +3)</option>
+                <option value="Africa/Johannesburg">Africa/Johannesburg (SAST +2)</option>
+                <option value="America/New_York">America/New_York (EST/EDT)</option>
+                <option value="America/Chicago">America/Chicago (CST/CDT)</option>
+                <option value="America/Denver">America/Denver (MST/MDT)</option>
+                <option value="America/Los_Angeles">America/Los_Angeles (PST/PDT)</option>
+                <option value="America/Toronto">America/Toronto (EST/EDT)</option>
+                <option value="America/Sao_Paulo">America/Sao_Paulo (BRT)</option>
+                <option value="UTC">UTC</option>
+                <option value="__custom__">Other (enter below)…</option>
+            </select>
+            <input type="text" id="tzCustomInput" placeholder="e.g. Europe/Helsinki" style="display:none;padding:3px 8px;border-radius:6px;border:1px solid rgba(15,23,42,0.12);font-size:0.82rem;width:170px">
+            <button id="tzApplyBtn" style="padding:4px 12px;border-radius:6px;border:none;background:var(--accent);color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer">Apply</button>
+            <span id="tzApplyStatus" style="font-size:0.78rem;display:none"></span>
+        </div>
 
         <!-- Flash messages under header -->
         <div class="flash-wrap" aria-live="polite" style="padding:12px 18px;padding-bottom:0">
@@ -395,10 +473,9 @@
                 <!-- Playlists manager (multi-playlist) -->
                 <div class="card" aria-labelledby="playlistsHeading" style="margin-bottom:12px">
                     <div class="section-header"><h2 id="playlistsHeading">📂 Playlists</h2></div>
-                    <div class="muted" style="margin-bottom:8px">Create, edit, or delete playlists. Web players choose their own playlist independently.</div>
+                    <div class="muted" style="margin-bottom:8px">Select a playlist to edit it. Create or delete playlists below.</div>
                     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
                         <select id="playlistSelector" style="padding:8px;border-radius:8px;border:1px solid rgba(15,23,42,0.08)"></select>
-                        <button id="editPlaylistBtn" class="save-mode-btn" style="background:linear-gradient(90deg,#10b981,#34d399)">Edit</button>
                         <input id="newPlaylistName" placeholder="New playlist name" style="padding:8px;border-radius:8px;border:1px solid rgba(15,23,42,0.08)" />
                         <button id="createPlaylistBtn" class="save-mode-btn">Create</button>
                         <button id="duplicatePlaylistBtn" class="save-mode-btn" style="background:linear-gradient(90deg,#64748b,#334155)">Duplicate</button>
@@ -416,8 +493,80 @@
                         <ul id="playlistList" style="list-style:none;display:flex;flex-direction:column;gap:8px;padding:0;margin:0">
                             <li class="file-item muted">Select a playlist to edit…</li>
                         </ul>
+
+                        <!-- Scheduler section -->
+                        <div id="schedulerSection" style="margin-top:16px;border-top:1px solid rgba(15,23,42,0.08);padding-top:14px">
+                            <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+                                <label style="display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer;user-select:none">
+                                    <input type="checkbox" id="schedulerToggle" style="width:16px;height:16px;accent-color:var(--accent)">
+                                    Enable Scheduler
+                                </label>
+                                <span style="color:var(--muted);font-size:0.82rem">Drag blocks on the timeline to set when each item plays. Gaps use the default content.</span>
+                            </div>
+
+                            <div id="schedulerControls" style="display:none">
+                                <!-- View tabs -->
+                                <div class="tl-tabs">
+                                    <button class="tl-tab active" data-view="daily">📅 Daily Schedule</button>
+                                    <button class="tl-tab" data-view="once">🗓 One-Time Schedule</button>
+                                </div>
+
+                                <!-- Date picker (one-time view only) -->
+                                <div class="tl-once-date-wrap" id="tlOnceDateWrap" style="display:none">
+                                    <span>Show schedule for:</span>
+                                    <input type="date" id="tlOnceDate">
+                                </div>
+
+                                <!-- Zoom / pan controls -->
+                                <div class="tl-zoom-bar">
+                                    <button class="tl-zoom-btn" id="tlZoomOut" title="Zoom out">−</button>
+                                    <input type="range" id="tlZoomSlider" min="0" max="6" step="1" value="0">
+                                    <button class="tl-zoom-btn" id="tlZoomIn" title="Zoom in">+</button>
+                                    <span class="tl-zoom-label" id="tlZoomLabel">24h view</span>
+                                    <span style="width:1px;height:20px;background:rgba(15,23,42,0.1)"></span>
+                                    <button class="tl-zoom-btn" id="tlPanLeft" title="Pan left" disabled>◀</button>
+                                    <button class="tl-zoom-btn" id="tlPanRight" title="Pan right" disabled>▶</button>
+                                    <button class="tl-zoom-btn" id="tlGoNow" title="Jump to current time">Now</button>
+                                </div>
+
+                                <!-- Timeline -->
+                                <div class="tl-outer">
+                                    <div class="tl-top">
+                                        <!-- Item name labels -->
+                                        <div class="tl-label-col">
+                                            <div class="tl-label-col-header">Item</div>
+                                            <div id="tlLabelCol"></div>
+                                        </div>
+                                        <!-- Ruler + tracks -->
+                                        <div class="tl-right">
+                                            <div class="tl-ruler" id="tlRuler"></div>
+                                            <div class="tl-tracks-wrap" id="tlTracksWrap">
+                                                <div id="tlTracksArea" style="position:relative">
+                                                    <div class="tl-nowline" id="tlNowLine"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Minimap: full 24h overview with view-window indicator -->
+                                <div class="tl-minimap" id="tlMinimap" title="Click to pan timeline"></div>
+
+                                <!-- Default content -->
+                                <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(15,23,42,0.06)">
+                                    <label style="display:block;font-size:0.88rem;margin-bottom:6px;color:var(--muted)">
+                                        Default content (plays when nothing is scheduled):
+                                        <span id="schedulerDefaultLabel" class="default-active-badge" style="display:none">▶ Playing now</span>
+                                    </label>
+                                    <select id="schedulerDefaultPicker" style="padding:7px 10px;border-radius:8px;border:1px solid rgba(15,23,42,0.1);min-width:300px;font-size:0.9rem">
+                                        <option value="">— None (loop all items as fallback) —</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
                         <div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end">
-                            <button id="savePlaylistOrder" class="save-mode-btn">Save Playist</button>
+                            <button id="savePlaylistOrder" class="save-mode-btn">Save Playlist</button>
                         </div>
                     </div>
                 </div>
@@ -437,7 +586,7 @@
                             <label class="drop-area" for="videoFile" tabindex="0" aria-label="Upload a video">
                                 <div class="drop-default">
                                     <strong>Drag & drop or click to browse</strong>
-                                    <small>MP4, AVI, MOV, MKV, WEBM (max size depends on server)</small>
+                                    <small>MP4, AVI, MOV, MKV, WEBM &mdash; file uploads automatically on selection</small>
                                 </div>
 
                                 <div class="preview-area is-hidden">
@@ -451,7 +600,7 @@
                             </label>
 
                             <div style="display:flex;gap:10px;justify-content:flex-end">
-                                <button type="submit" class="save-mode-btn" aria-label="Upload video">Upload</button>
+                                <button type="button" class="save-mode-btn" id="videoUploadBtn" aria-label="Upload video">Upload</button>
                             </div>
                         </form>
                     </div>
@@ -495,7 +644,7 @@
                             <label class="drop-area" for="presentationFile" tabindex="0" aria-label="Upload a presentation">
                                 <div class="drop-default">
                                     <strong>Drag & drop or click to browse</strong>
-                                    <small>PPTX, PPT, PDF</small>
+                                    <small>PPTX, PPT, PDF &mdash; file uploads automatically on selection</small>
                                 </div>
 
                                 <div class="preview-area is-hidden">
@@ -509,7 +658,7 @@
                             </label>
 
                             <div style="display:flex;gap:10px;justify-content:flex-end">
-                                <button type="submit" class="save-mode-btn" aria-label="Upload presentation">Upload</button>
+                                <button type="button" class="save-mode-btn" id="presentationUploadBtn" aria-label="Upload presentation">Upload</button>
                             </div>
                         </form>
                     </div>
@@ -795,7 +944,38 @@
             area.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { input.click(); e.preventDefault(); } });
 
             // update display when user selects from file picker
-            input.addEventListener('change', () => updateSelectedDisplayForInput(input));
+            input.addEventListener('change', () => {
+                updateSelectedDisplayForInput(input);
+                // Auto-submit the form as soon as a file is chosen
+                const form = input.closest('form.uploadForm');
+                if (form && input.files && input.files.length > 0) {
+                    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+                }
+            });
+        });
+
+        // Upload button behaviour:
+        // - If no file selected → open file picker
+        // - If file already selected → trigger form submit (chunked handler picks it up)
+        document.getElementById('videoUploadBtn')?.addEventListener('click', () => {
+            const input = document.getElementById('videoFile');
+            const form = input?.closest('form.uploadForm');
+            if (!input) return;
+            if (!input.files || input.files.length === 0) {
+                input.click();
+            } else {
+                form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            }
+        });
+        document.getElementById('presentationUploadBtn')?.addEventListener('click', () => {
+            const input = document.getElementById('presentationFile');
+            const form = input?.closest('form.uploadForm');
+            if (!input) return;
+            if (!input.files || input.files.length === 0) {
+                input.click();
+            } else {
+                form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            }
         });
 
         // Progress bar animation on file upload forms (UI-only, lightweight)
@@ -922,6 +1102,9 @@
                     await uploadFileInChunks(file, contentType, onProgress);
                     // finish progress then reload so new files + checkboxes are rendered
                     progressBar.style.width = '100%';
+                    // Preserve current playlist selection across the reload
+                    const _selBeforeReload = document.getElementById('playlistSelector');
+                    if (_selBeforeReload && _selBeforeReload.value) sessionStorage.setItem('lastPlaylistName', _selBeforeReload.value);
                     setTimeout(() => { location.reload(); }, 400);
                 } catch (err) {
                     alert('Upload failed. Falling back to normal upload. Please try again.');
@@ -939,18 +1122,205 @@
 let currentEditingPlaylistId = null;
 let currentEditingPlaylistName = null;
 let currentPlaylistItems = [];
+let currentSchedulerEnabled = false;
+let currentSchedulerDefault = null;
+
+// Centralized function to load a playlist into the editor by name.
+// Called on selector change, after page init, and after any operation that rebuilds the selector.
+async function loadPlaylistByName(name) {
+    if (!name) return;
+    try {
+        const listRes = await fetch('/api/playlists');
+        const list = await listRes.json();
+        const target = (list.playlists || []).find(p => p.name === name);
+        if (!target) return;
+
+        currentEditingPlaylistId = target.id;
+        currentEditingPlaylistName = target.name;
+
+        const plRes = await fetch('/api/playlists/' + target.id);
+        const plData = await plRes.json();
+        const plObj = plData.playlist || {};
+        currentPlaylistItems = normalizePlaylistItems(plObj.items);
+        currentSchedulerEnabled = !!(plObj.scheduler_enabled);
+        currentSchedulerDefault = plObj.scheduler_default || null;
+
+        const badge = document.getElementById('currentEditingBadge');
+        if (badge) badge.textContent = 'Editing: ' + name;
+        const nameTag = document.getElementById('activeNameTag');
+        if (nameTag) nameTag.textContent = name;
+
+        // Sync scheduler toggle UI
+        const toggle = document.getElementById('schedulerToggle');
+        const controls = document.getElementById('schedulerControls');
+        if (toggle) toggle.checked = currentSchedulerEnabled;
+        if (controls) controls.style.display = currentSchedulerEnabled ? '' : 'none';
+
+        renderPlaylistEditorFromState();
+        syncCheckboxesFromState();
+        startNowPlayingTimer();
+        if (currentSchedulerEnabled) startTlNowLine();
+        await loadContentForDefaultPicker();
+        sessionStorage.setItem('lastPlaylistName', name);
+    } catch(e) { console.warn('loadPlaylistByName failed', e); }
+}
+
+async function checkServerTimezone() {
+    try {
+        // Load current timezone config and server time in parallel
+        const [timeRes, cfgRes] = await Promise.all([
+            fetch('/api/server_time'),
+            fetch('/api/config')
+        ]);
+        if (!timeRes.ok) return;
+        const timeData = await timeRes.json();
+        const cfgData  = cfgRes.ok ? await cfgRes.json() : {};
+
+        // Update time display
+        const timeEl = document.getElementById('serverTimeDisplay');
+        const tzEl   = document.getElementById('serverTzDisplay');
+        const warnEl = document.getElementById('tzMismatchWarn');
+        if (timeEl) timeEl.textContent = timeData.time || '--:--';
+        if (tzEl)   tzEl.textContent   = timeData.timezone || '';
+
+        // Pre-select current timezone in dropdown
+        const sel = document.getElementById('tzSelect');
+        const currentTz = cfgData.timezone || timeData.timezone || 'UTC';
+        if (sel) {
+            let matched = false;
+            for (const opt of sel.options) {
+                if (opt.value === currentTz) { opt.selected = true; matched = true; break; }
+            }
+            if (!matched && currentTz) {
+                // Not in dropdown list — show custom input
+                sel.value = '__custom__';
+                const ci = document.getElementById('tzCustomInput');
+                if (ci) { ci.style.display = ''; ci.value = currentTz; }
+            }
+        }
+
+        // Mismatch warning (informational only — schedule eval is now client-side)
+        if (warnEl) {
+            const now = new Date();
+            const browserMin = now.getHours() * 60 + now.getMinutes();
+            const [sh, sm]   = (timeData.time || '00:00').split(':').map(Number);
+            const serverMin  = sh * 60 + sm;
+            warnEl.style.display = Math.abs(browserMin - serverMin) > 2 ? '' : 'none';
+        }
+    } catch(e) {}
+}
+
+function wireTimezoneControls() {
+    const sel     = document.getElementById('tzSelect');
+    const ci      = document.getElementById('tzCustomInput');
+    const applyBtn= document.getElementById('tzApplyBtn');
+    const status  = document.getElementById('tzApplyStatus');
+
+    if (sel) {
+        sel.addEventListener('change', () => {
+            if (ci) ci.style.display = sel.value === '__custom__' ? '' : 'none';
+        });
+    }
+
+    if (applyBtn) {
+        applyBtn.addEventListener('click', async () => {
+            const tz = (sel && sel.value === '__custom__')
+                ? (ci ? ci.value.trim() : '')
+                : (sel ? sel.value : '');
+            if (!tz) return;
+            applyBtn.disabled = true;
+            try {
+                const res = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({timezone: tz})
+                });
+                const d = await res.json();
+                if (status) {
+                    status.style.display = '';
+                    if (d.ok) {
+                        status.style.color = '#16a34a';
+                        status.textContent = '✓ Saved — server now uses ' + tz;
+                        setTimeout(() => checkServerTimezone(), 500);
+                    } else {
+                        status.style.color = '#dc2626';
+                        status.textContent = '✗ ' + (d.error || 'Save failed');
+                    }
+                    setTimeout(() => { if(status) status.style.display = 'none'; }, 4000);
+                }
+            } catch(e) {
+                if (status) { status.style.display=''; status.style.color='#dc2626'; status.textContent='✗ Network error'; }
+            }
+            applyBtn.disabled = false;
+        });
+    }
+}
+
+async function loadContentForDefaultPicker() {
+    checkServerTimezone();
+    try {
+        const res = await fetch('/api/content');
+        if (!res.ok) return;
+        const data = await res.json();
+        const sel = document.getElementById('schedulerDefaultPicker');
+        if (!sel) return;
+        sel.innerHTML = '<option value="">— None (loop all items as fallback) —</option>';
+        (data.videos || []).forEach(v => {
+            const opt = document.createElement('option');
+            opt.value = JSON.stringify({name: v, repeats: 1});
+            opt.textContent = '\uD83C\uDFA5 ' + v;
+            if (currentSchedulerDefault && currentSchedulerDefault.name === v) opt.selected = true;
+            sel.appendChild(opt);
+        });
+        (data.presentations || []).forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = JSON.stringify({name: p, repeats: 1});
+            opt.textContent = '\uD83D\uDCCA ' + p;
+            if (currentSchedulerDefault && currentSchedulerDefault.name === p) opt.selected = true;
+            sel.appendChild(opt);
+        });
+        (data.youtube || []).forEach(y => {
+            const opt = document.createElement('option');
+            opt.value = JSON.stringify({name: y.url, repeats: 1});
+            opt.textContent = '\uD83D\uDCF9 ' + (y.title || y.url);
+            if (currentSchedulerDefault && currentSchedulerDefault.name === y.url) opt.selected = true;
+            sel.appendChild(opt);
+        });
+    } catch(e) { console.warn('loadContentForDefaultPicker failed', e); }
+}
+
+// Helper: rebuild the playlist <select> and optionally pick a specific name (or current/first).
+async function refreshPlaylistSelector(selectName) {
+    const res = await fetch('/api/playlists');
+    const j = await res.json();
+    const sel = document.getElementById('playlistSelector');
+    if (sel) {
+        sel.innerHTML = '';
+        (j.playlists || []).forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.name; opt.textContent = p.name;
+            sel.appendChild(opt);
+        });
+        if (selectName) sel.value = selectName;
+    }
+    return j;
+}
 
 function normalizePlaylistItems(items){
     const out = [];
     (items || []).forEach(it => {
         if(!it) return;
         if(typeof it === 'string'){
-            out.push({name: it, repeats: 1});
+            out.push({name: it, repeats: 1, schedule: []});
             return;
         }
         if(typeof it === 'object' && it.name){
             const repeats = Math.max(1, parseInt(it.repeats) || 1);
-            out.push({name: it.name, repeats});
+            // Normalize schedule: null/undefined → [], single object → [obj], array → keep
+            let sched = it.schedule;
+            if (!sched) sched = [];
+            else if (!Array.isArray(sched)) sched = [sched];
+            out.push({name: it.name, repeats, schedule: sched});
         }
     });
     return out;
@@ -966,13 +1336,485 @@ function syncCheckboxesFromState(){
     });
 }
 
+let nowPlayingTimer = null;
+
+function getNowPlayingSet() {
+    if (!currentSchedulerEnabled) return { active: new Set(), defaultActive: false };
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    const currentTime = `${hh}:${mm}`;
+    const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    const active = new Set();
+    for (const item of currentPlaylistItems) {
+        const schedules = Array.isArray(item.schedule) ? item.schedule : (item.schedule ? [item.schedule] : []);
+        for (const sched of schedules) {
+            if (!sched || !sched.recurrence) continue;
+            const start = sched.start_time || '00:00';
+            const end   = sched.end_time   || '23:59';
+            const inWindow = start <= currentTime && currentTime < end;
+            if (sched.recurrence === 'daily' && inWindow) { active.add(item.name); break; }
+            else if (sched.recurrence === 'once' && sched.date === today && inWindow) { active.add(item.name); break; }
+        }
+    }
+    // Priority when multiple items active: default wins; else first in sequence order
+    if (active.size > 1) {
+        if (currentSchedulerDefault && currentSchedulerDefault.name && active.has(currentSchedulerDefault.name)) {
+            active.clear(); active.add(currentSchedulerDefault.name);
+        } else {
+            for (const item of currentPlaylistItems) {
+                if (active.has(item.name)) { const winner = item.name; active.clear(); active.add(winner); break; }
+            }
+        }
+    }
+    // If nothing scheduled, the default content is what's playing
+    const defaultActive = active.size === 0;
+    if (defaultActive && currentSchedulerDefault && currentSchedulerDefault.name) {
+        active.add(currentSchedulerDefault.name);
+    }
+    return { active, defaultActive };
+}
+
+function startNowPlayingTimer() {
+    if (nowPlayingTimer) clearInterval(nowPlayingTimer);
+    nowPlayingTimer = null;
+    if (currentSchedulerEnabled) {
+        nowPlayingTimer = setInterval(() => renderPlaylistEditorFromState(), 30000);
+    }
+}
+
+// ── Timeline Scheduler ────────────────────────────────────────────────────────
+
+const TL_COLORS = ['#6366f1','#f59e0b','#10b981','#ef4444','#8b5cf6','#06b6d4','#f97316','#ec4899','#14b8a6','#a855f7'];
+let tlCurrentView = 'daily';
+let tlOnceDate = '';
+let tlDragState = null;
+let tlNowInterval = null;
+const TL_ZOOM_STEPS = [1440, 720, 360, 240, 120, 60, 30]; // minutes visible per step
+let tlZoomStep = 0;
+let tlViewStart = 0; // start minute of the visible window
+
+function getItemColor(idx) { return TL_COLORS[idx % TL_COLORS.length]; }
+
+function timeToMin(t) {
+    if (!t) return 0;
+    const parts = t.split(':');
+    return Math.max(0, Math.min(1439, parseInt(parts[0]||0) * 60 + parseInt(parts[1]||0)));
+}
+
+function minToTime(m) {
+    m = Math.max(0, Math.min(1439, Math.round(m / 5) * 5));
+    return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+}
+
+function tlViewDur() { return TL_ZOOM_STEPS[tlZoomStep]; }
+
+function clampViewStart(s) {
+    return Math.max(0, Math.min(1440 - tlViewDur(), Math.round(s)));
+}
+
+function updateTlZoomUI() {
+    const dur = tlViewDur();
+    const label = dur >= 60 ? (dur / 60) + 'h' : dur + 'm';
+    const el = document.getElementById('tlZoomLabel');
+    if (el) el.textContent = label + ' view';
+    const slider = document.getElementById('tlZoomSlider');
+    if (slider) slider.value = tlZoomStep;
+    const btnL   = document.getElementById('tlPanLeft');
+    const btnR   = document.getElementById('tlPanRight');
+    const btnOut = document.getElementById('tlZoomOut');
+    const btnIn  = document.getElementById('tlZoomIn');
+    if (btnL)   btnL.disabled   = tlViewStart <= 0;
+    if (btnR)   btnR.disabled   = tlViewStart >= 1440 - dur;
+    if (btnOut) btnOut.disabled = tlZoomStep === 0;
+    if (btnIn)  btnIn.disabled  = tlZoomStep === TL_ZOOM_STEPS.length - 1;
+}
+
+function doTlZoom(newStep) {
+    const prevCenter = tlViewStart + tlViewDur() / 2;
+    tlZoomStep = Math.max(0, Math.min(TL_ZOOM_STEPS.length - 1, newStep));
+    tlViewStart = clampViewStart(prevCenter - tlViewDur() / 2);
+    renderTimeline(); // renderTimeline calls updateTlZoomUI + renderTlMinimap
+}
+
+function doTlPan(deltaMin) {
+    tlViewStart = clampViewStart(tlViewStart + deltaMin);
+    renderTimeline();
+}
+
+function buildNameColorMap() {
+    const map = {};
+    let ci = 0;
+    currentPlaylistItems.forEach(item => {
+        if (!(item.name in map)) { map[item.name] = TL_COLORS[ci % TL_COLORS.length]; ci++; }
+    });
+    return map;
+}
+
+function renderTlMinimap() {
+    const mm = document.getElementById('tlMinimap');
+    if (!mm) return;
+    mm.innerHTML = '';
+    const nameColorMap = buildNameColorMap();
+    currentPlaylistItems.forEach(item => {
+        const schedules = Array.isArray(item.schedule) ? item.schedule : (item.schedule ? [item.schedule] : []);
+        schedules.forEach(sched => {
+            if (!sched || !sched.recurrence) return;
+            const matchView = (tlCurrentView === 'daily' && sched.recurrence === 'daily') ||
+                              (tlCurrentView === 'once'  && sched.recurrence === 'once' &&
+                               (!tlOnceDate || sched.date === tlOnceDate));
+            if (!matchView) return;
+            const s = timeToMin(sched.start_time);
+            const e = timeToMin(sched.end_time);
+            const bar = document.createElement('div');
+            bar.className = 'tl-minimap-item';
+            bar.style.left  = ((s / 1440) * 100) + '%';
+            bar.style.width = (((e - s) / 1440) * 100) + '%';
+            bar.style.background = nameColorMap[item.name] || TL_COLORS[0];
+            mm.appendChild(bar);
+        });
+    });
+    const dur = tlViewDur();
+    const win = document.createElement('div');
+    win.className = 'tl-minimap-window';
+    win.style.left  = ((tlViewStart / 1440) * 100) + '%';
+    win.style.width = ((dur / 1440) * 100) + '%';
+    mm.appendChild(win);
+}
+
+function renderTimeline() {
+    const tracksArea = document.getElementById('tlTracksArea');
+    const labelCol   = document.getElementById('tlLabelCol');
+    const rulerEl    = document.getElementById('tlRuler');
+    if (!tracksArea) return;
+
+    const dur     = tlViewDur();
+    const viewEnd = tlViewStart + dur;
+    const W = tracksArea.offsetWidth || tracksArea.parentElement.offsetWidth || 600;
+
+    // Clear
+    tracksArea.innerHTML = '';
+    if (labelCol) labelCol.innerHTML = '';
+    if (rulerEl)  rulerEl.innerHTML  = '';
+
+    // Now-line (re-add after clearing)
+    const nl = document.createElement('div');
+    nl.className = 'tl-nowline'; nl.id = 'tlNowLine';
+    tracksArea.appendChild(nl);
+
+    // Ruler: adaptive labels + ticks based on zoom level
+    if (rulerEl) {
+        let labelStep, tickStep;
+        if (dur <= 30)       { labelStep = 5;   tickStep = 1;  }
+        else if (dur <= 60)  { labelStep = 10;  tickStep = 5;  }
+        else if (dur <= 120) { labelStep = 15;  tickStep = 5;  }
+        else if (dur <= 240) { labelStep = 30;  tickStep = 15; }
+        else if (dur <= 480) { labelStep = 60;  tickStep = 30; }
+        else if (dur <= 720) { labelStep = 120; tickStep = 60; }
+        else                 { labelStep = 180; tickStep = 60; }
+
+        for (let m = Math.ceil(tlViewStart / labelStep) * labelStep; m <= viewEnd; m += labelStep) {
+            const frac = (m - tlViewStart) / dur;
+            if (frac < -0.001 || frac > 1.001) continue;
+            const lbl = document.createElement('div');
+            lbl.className = 'tl-ruler-label';
+            lbl.style.left = (frac * 100) + '%';
+            lbl.textContent = String(Math.floor(m / 60) % 24).padStart(2,'0') + ':' + String(m % 60).padStart(2,'0');
+            rulerEl.appendChild(lbl);
+        }
+        for (let m = Math.ceil(tlViewStart / tickStep) * tickStep; m <= viewEnd; m += tickStep) {
+            const frac = (m - tlViewStart) / dur;
+            if (frac < -0.001 || frac > 1.001) continue;
+            const tick = document.createElement('div');
+            tick.className = 'tl-ruler-tick' + (m % labelStep === 0 ? ' major' : '');
+            tick.style.left = (frac * 100) + '%';
+            rulerEl.appendChild(tick);
+        }
+    }
+
+    // One lane per unique item name; each lane can have multiple schedule blocks
+    const nameColorMap = buildNameColorMap();
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+
+    // Preserve insertion order of unique names
+    const seenNames = [];
+    currentPlaylistItems.forEach(item => { if (!seenNames.includes(item.name)) seenNames.push(item.name); });
+
+    seenNames.forEach(name => {
+        const color = nameColorMap[name];
+        const shortName = name.length > 13 ? name.slice(0, 11) + '…' : name;
+
+        // Label column — one row per name with "+" to add another slot
+        if (labelCol) {
+            const lbl = document.createElement('div');
+            lbl.className = 'tl-lane-label';
+            lbl.style.borderLeft = '3px solid ' + color;
+            lbl.innerHTML = `<span class="tl-lane-name" title="${name}">${shortName}</span><button class="tl-add-instance-btn" title="Add another time slot for this item">+</button>`;
+            lbl.querySelector('.tl-add-instance-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                addItemInstance(name);
+            });
+            labelCol.appendChild(lbl);
+        }
+
+        // Track lane
+        const lane = document.createElement('div');
+        lane.className = 'tl-lane';
+
+        // Hour gridlines
+        for (let h = 0; h < 24; h++) {
+            const hMin = h * 60;
+            if (hMin <= tlViewStart || hMin >= viewEnd) continue;
+            const frac = (hMin - tlViewStart) / dur;
+            const g = document.createElement('div');
+            g.className = 'tl-gridline' + (h % 3 === 0 ? ' major' : '');
+            g.style.left = (frac * 100) + '%';
+            lane.appendChild(g);
+        }
+
+        // Collect all schedule entries for this name across all items
+        let hasAnyBlockInView = false;
+        let hasScheduleInOtherView = false;
+
+        currentPlaylistItems.forEach((item, idx) => {
+            if (item.name !== name) return;
+            const schedules = Array.isArray(item.schedule) ? item.schedule : (item.schedule ? [item.schedule] : []);
+
+            schedules.forEach((sched, schedIdx) => {
+                if (!sched || !sched.recurrence) return;
+                const matchView = (tlCurrentView === 'daily' && sched.recurrence === 'daily') ||
+                                  (tlCurrentView === 'once'  && sched.recurrence === 'once' &&
+                                   (!tlOnceDate || sched.date === tlOnceDate));
+                if (!matchView) { hasScheduleInOtherView = true; return; }
+
+                hasAnyBlockInView = true;
+                const startMin = timeToMin(sched.start_time);
+                const endMin   = timeToMin(sched.end_time);
+                const durMin   = Math.max(endMin - startMin, 5);
+
+                if (endMin <= tlViewStart || startMin >= viewEnd) {
+                    // Off-screen hint (only add once per off-screen block)
+                    const ph = document.createElement('div');
+                    ph.className = 'tl-placeholder';
+                    if (endMin <= tlViewStart) {
+                        ph.textContent = '◀ ' + sched.start_time + '–' + sched.end_time;
+                        ph.title = 'Pan left to see this block';
+                    } else {
+                        ph.textContent = sched.start_time + '–' + sched.end_time + ' ▶';
+                        ph.style.right = '8px'; ph.style.left = 'auto';
+                        ph.title = 'Pan right to see this block';
+                    }
+                    lane.appendChild(ph);
+                } else {
+                    const block = document.createElement('div');
+                    block.className = 'tl-block';
+                    block.style.left       = (((startMin - tlViewStart) / dur) * 100) + '%';
+                    block.style.width      = ((durMin / dur) * 100) + '%';
+                    block.style.background = color;
+                    if (nowMin >= startMin && nowMin < endMin) block.classList.add('tl-block-active');
+
+                    block.innerHTML = `
+                        <div class="tl-handle tl-handle-left"  data-edge="left"></div>
+                        <div class="tl-block-inner">${sched.start_time}–${sched.end_time}</div>
+                        <button class="tl-remove-btn" title="Remove this time slot" tabindex="-1">×</button>
+                        <div class="tl-handle tl-handle-right" data-edge="right"></div>`;
+
+                    block.addEventListener('mousedown', (e) => {
+                        if (e.target.dataset.edge || e.target.classList.contains('tl-remove-btn')) return;
+                        e.preventDefault();
+                        const s = currentPlaylistItems[idx].schedule[schedIdx];
+                        tlDragState = { idx, schedIdx, name, type: 'move', startX: e.clientX,
+                            origStart: timeToMin(s.start_time), origEnd: timeToMin(s.end_time), W };
+                    });
+                    block.querySelector('.tl-handle-left').addEventListener('mousedown', (e) => {
+                        e.preventDefault(); e.stopPropagation();
+                        const s = currentPlaylistItems[idx].schedule[schedIdx];
+                        tlDragState = { idx, schedIdx, name, type: 'left', startX: e.clientX,
+                            origStart: timeToMin(s.start_time), origEnd: timeToMin(s.end_time), W };
+                    });
+                    block.querySelector('.tl-handle-right').addEventListener('mousedown', (e) => {
+                        e.preventDefault(); e.stopPropagation();
+                        const s = currentPlaylistItems[idx].schedule[schedIdx];
+                        tlDragState = { idx, schedIdx, name, type: 'right', startX: e.clientX,
+                            origStart: timeToMin(s.start_time), origEnd: timeToMin(s.end_time), W };
+                    });
+
+                    // Remove just this time slot
+                    block.querySelector('.tl-remove-btn').addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        currentPlaylistItems[idx].schedule.splice(schedIdx, 1);
+                        renderTimeline();
+                        renderPlaylistEditorFromState();
+                    });
+
+                    lane.appendChild(block);
+                }
+            });
+        });
+
+        // No blocks in this view: show "click to schedule" affordance
+        if (!hasAnyBlockInView) {
+            if (hasScheduleInOtherView) {
+                const ph = document.createElement('div');
+                ph.className = 'tl-placeholder';
+                ph.textContent = tlCurrentView === 'daily' ? '🗓 Has one-time schedule (switch tab)' : '📅 Has daily schedule (switch tab)';
+                lane.appendChild(ph);
+            } else {
+                const addBtn = document.createElement('button');
+                addBtn.className = 'tl-add-btn';
+                addBtn.textContent = '+ Click to schedule';
+                addBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const centerMin = tlViewStart + Math.round(dur / 2 / 5) * 5;
+                    const halfDur   = Math.max(5, Math.round(dur / 4 / 5) * 5);
+                    const sMinVal   = Math.max(0, centerMin - halfDur);
+                    const eMinVal   = Math.min(1439, sMinVal + halfDur * 2);
+                    // Add schedule to first item entry with this name
+                    const firstItem = currentPlaylistItems.find(it => it.name === name);
+                    if (firstItem) {
+                        if (!Array.isArray(firstItem.schedule)) firstItem.schedule = [];
+                        firstItem.schedule.push({
+                            recurrence: tlCurrentView === 'once' ? 'once' : 'daily',
+                            start_time: minToTime(sMinVal),
+                            end_time:   minToTime(eMinVal),
+                            date: tlCurrentView === 'once' ? (tlOnceDate || new Date().toISOString().slice(0,10)) : null
+                        });
+                    }
+                    renderTimeline();
+                    renderPlaylistEditorFromState();
+                });
+                lane.appendChild(addBtn);
+            }
+        }
+
+        tracksArea.appendChild(lane);
+    });
+
+    updateTlNowLine();
+    updateTlZoomUI();
+    renderTlMinimap();
+}
+
+function updateTlNowLine() {
+    const nl   = document.getElementById('tlNowLine');
+    const area = document.getElementById('tlTracksArea');
+    if (!nl) return;
+    const now    = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+    const dur    = tlViewDur();
+    const frac   = (nowMin - tlViewStart) / dur;
+    if (frac < 0 || frac > 1) {
+        nl.style.display = 'none';
+    } else {
+        nl.style.display = '';
+        nl.style.left = (frac * 100) + '%';
+        if (area) nl.style.height = area.scrollHeight + 'px';
+        nl.title = 'Now: ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+    }
+}
+
+function startTlNowLine() {
+    if (tlNowInterval) clearInterval(tlNowInterval);
+    tlNowInterval = setInterval(updateTlNowLine, 1000);
+}
+
+// Add a new time slot for an item without overlapping its existing slots
+function addItemInstance(name) {
+    const existing = [];
+    currentPlaylistItems.forEach(item => {
+        if (item.name !== name) return;
+        const schedules = Array.isArray(item.schedule) ? item.schedule : (item.schedule ? [item.schedule] : []);
+        schedules.forEach(sched => {
+            if (!sched || !sched.recurrence) return;
+            if (tlCurrentView === 'daily' && sched.recurrence !== 'daily') return;
+            if (tlCurrentView === 'once'  && sched.recurrence !== 'once')  return;
+            existing.push({ s: timeToMin(sched.start_time), e: timeToMin(sched.end_time) });
+        });
+    });
+    existing.sort((a, b) => a.s - b.s);
+
+    // Slot size: match visible window resolution, min 30 min
+    const slotDur = Math.max(30, Math.round(tlViewDur() / 4 / 5) * 5);
+
+    // Anchor to current time first, then after each existing block (sorted by proximity to now)
+    const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+    const roundedNow = Math.round(nowMin / 5) * 5;
+    const afterBlocks = existing.map(w => w.e).sort((a, b) => Math.abs(a - roundedNow) - Math.abs(b - roundedNow));
+    const candidates = [roundedNow, ...afterBlocks, 0];
+
+    let newStart = null;
+    for (const pos of candidates) {
+        const start = Math.max(0, Math.min(pos, 1440 - slotDur));
+        if (!existing.some(w => start < w.e && start + slotDur > w.s)) { newStart = start; break; }
+    }
+    if (newStart === null) newStart = roundedNow; // truly no free gap — place at now, user can nudge
+
+    const firstItem = currentPlaylistItems.find(it => it.name === name);
+    if (!firstItem) return;
+    if (!Array.isArray(firstItem.schedule)) firstItem.schedule = [];
+    firstItem.schedule.push({
+        recurrence: tlCurrentView === 'once' ? 'once' : 'daily',
+        start_time: minToTime(newStart),
+        end_time:   minToTime(Math.min(1439, newStart + slotDur)),
+        date: tlCurrentView === 'once' ? (tlOnceDate || new Date().toISOString().slice(0,10)) : null
+    });
+
+    // Pan view so the new block is visible (center it)
+    tlViewStart = clampViewStart(newStart + slotDur / 2 - tlViewDur() / 2);
+
+    renderTimeline();
+    renderPlaylistEditorFromState();
+}
+
+// Global mouse handlers for dragging timeline blocks
+document.addEventListener('mousemove', (e) => {
+    if (!tlDragState) return;
+    const { idx, schedIdx, type, startX, origStart, origEnd, W } = tlDragState;
+    const item = currentPlaylistItems[idx];
+    if (!item || !Array.isArray(item.schedule) || !item.schedule[schedIdx]) { tlDragState = null; return; }
+    const sched = item.schedule[schedIdx];
+
+    const dx    = e.clientX - startX;
+    const dMin  = Math.round((dx / W) * tlViewDur() / 5) * 5;
+    const dur   = origEnd - origStart;
+
+    if (type === 'move') {
+        const ns = Math.max(0, Math.min(1440 - dur, origStart + dMin));
+        sched.start_time = minToTime(ns);
+        sched.end_time   = minToTime(ns + dur);
+    } else if (type === 'left') {
+        const ns = Math.max(0, Math.min(origEnd - 5, origStart + dMin));
+        sched.start_time = minToTime(ns);
+    } else if (type === 'right') {
+        const ne = Math.max(origStart + 5, Math.min(1439, origEnd + dMin));
+        sched.end_time = minToTime(ne);
+    }
+
+    renderTimeline();
+});
+
+document.addEventListener('mouseup', () => {
+    if (tlDragState) {
+        tlDragState = null;
+        renderPlaylistEditorFromState();
+    }
+});
+
+// Re-render timeline on window resize
+let tlResizeTimer = null;
+window.addEventListener('resize', () => {
+    clearTimeout(tlResizeTimer);
+    tlResizeTimer = setTimeout(() => { if (currentSchedulerEnabled) renderTimeline(); }, 150);
+});
+
 function renderPlaylistEditorFromState(){
     const list = document.getElementById('playlistList');
     if(!list) return;
     list.innerHTML = '';
 
     if(!currentEditingPlaylistId){
-        list.innerHTML = '<li class="file-item muted">Select a playlist to edit…</li>';
+        list.innerHTML = '<li class="file-item muted">Loading playlist…</li>';
         return;
     }
 
@@ -981,21 +1823,53 @@ function renderPlaylistEditorFromState(){
         return;
     }
 
+    const { active: nowPlayingNames, defaultActive } = getNowPlayingSet();
+
+    // Update default picker badge
+    const defLabel = document.getElementById('schedulerDefaultLabel');
+    if (defLabel) defLabel.style.display = (currentSchedulerEnabled && defaultActive) ? 'inline' : 'none';
+
     currentPlaylistItems.forEach((item, idx) => {
+        const isNowPlaying = nowPlayingNames.has(item.name);
         const li = document.createElement('li');
-        li.className = 'file-item';
+        li.className = 'file-item' + (isNowPlaying ? ' now-playing-item' : '');
         li.draggable = true;
         li.dataset.index = idx;
+
+        const nameColorMap = buildNameColorMap();
+        const color = nameColorMap[item.name] || TL_COLORS[0];
+        const schedules = Array.isArray(item.schedule) ? item.schedule : (item.schedule ? [item.schedule] : []);
+        let schedLabel = '';
+        if (currentSchedulerEnabled) {
+            if (schedules.length > 0) {
+                schedLabel = schedules.map(sched =>
+                    `<span class="tl-sched-badge" style="background:${color}22;color:${color};border:1px solid ${color}44">
+                        ${sched.recurrence === 'daily' ? '📅' : '🗓'} ${sched.start_time}–${sched.end_time}${sched.recurrence === 'once' && sched.date ? ' · ' + sched.date : ''}
+                     </span>`
+                ).join(' ');
+            } else {
+                schedLabel = '<span class="tl-unscheduled-hint">No schedule — drag on timeline below to add</span>';
+            }
+        }
+
         li.innerHTML = `
             <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
-                <div style="width:18px;cursor:grab">☰</div>
-                <div class="file-info">
-                    <div class="file-name">${item.name}</div>
+                <div style="width:18px;cursor:grab;padding-top:2px;flex-shrink:0">☰</div>
+                <span style="width:12px;height:12px;border-radius:3px;background:${color};flex-shrink:0;display:inline-block"></span>
+                <div class="file-info" style="flex:1;min-width:0">
+                    <div class="file-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                        ${isNowPlaying ? '<span class="now-playing-dot" title="Currently playing"></span>' : '<span style="width:10px;display:inline-block"></span>'}
+                        <span>${item.name}</span>
+                        ${isNowPlaying ? '<span class="now-playing-label">▶ Now Playing</span>' : ''}
+                    </div>
+                    ${schedLabel}
                 </div>
             </div>
-            <div style="display:flex;gap:8px;align-items:center">
-                <label style="font-size:0.9rem;color:var(--muted)">Repeat
-                    <input type="number" min="1" value="${item.repeats || 1}" class="playlist-repeat" style="width:64px;margin-left:8px;padding:6px;border-radius:8px;border:1px solid rgba(15,23,42,0.06);text-align:center">
+            <div style="display:flex;gap:8px;align-items:center;flex-shrink:0">
+                <label style="font-size:0.9rem;color:${currentSchedulerEnabled ? 'rgba(107,114,128,0.4)' : 'var(--muted)'};transition:color .15s" title="${currentSchedulerEnabled ? 'Repeat is ignored when the scheduler is enabled' : ''}">Repeat
+                    <input type="number" min="1" value="${item.repeats || 1}" class="playlist-repeat"
+                        ${currentSchedulerEnabled ? 'disabled' : ''}
+                        style="width:56px;margin-left:6px;padding:5px;border-radius:8px;border:1px solid rgba(15,23,42,0.06);text-align:center;${currentSchedulerEnabled ? 'opacity:0.35;cursor:not-allowed;background:#f1f5f9' : ''}">
                 </label>
             </div>
         `;
@@ -1028,6 +1902,11 @@ function renderPlaylistEditorFromState(){
 
         list.appendChild(li);
     });
+
+    // Render the visual timeline after updating the item list
+    if (currentSchedulerEnabled) {
+        renderTimeline();
+    }
 }
 
 /* Playlist checkbox toggle via AJAX */
@@ -1075,10 +1954,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
     // Load playlists manager
     (async function(){
         try{
-            const res = await fetch('/api/playlists');
-            const j = await res.json();
+            const j = await (await fetch('/api/playlists')).json();
             const sel = document.getElementById('playlistSelector');
-            const badge = document.getElementById('currentEditingBadge');
             if(sel){
                 sel.innerHTML = '';
                 (j.playlists||[]).forEach(p => {
@@ -1086,66 +1963,47 @@ document.addEventListener('DOMContentLoaded', ()=>{
                     opt.value = p.name; opt.textContent = p.name;
                     sel.appendChild(opt);
                 });
-            }
-            if(badge){
-                badge.textContent = 'No playlist selected';
+                // Restore last selection from sessionStorage, or fall back to first option
+                const saved = sessionStorage.getItem('lastPlaylistName');
+                const names = (j.playlists||[]).map(p=>p.name);
+                const toSelect = (saved && names.includes(saved)) ? saved : names[0];
+                if(toSelect){ sel.value = toSelect; await loadPlaylistByName(toSelect); }
             }
         }catch(e){ console.warn('Failed to load playlists', e); }
     })();
 
-    // Wire actions - Edit button loads playlist into editor (staged changes)
-    const editBtn = document.getElementById('editPlaylistBtn');
-    if(editBtn){
-        editBtn.onclick = async function(){
-            const sel = document.getElementById('playlistSelector');
-            const name = sel && sel.value;
-            if(!name) return alert('Select a playlist to edit');
-            
-            // Find playlist by name
-            const listRes = await fetch('/api/playlists');
-            const list = await listRes.json();
-            const target = (list.playlists||[]).find(p=>p.name===name);
-            if(!target) return alert('Playlist not found');
-            
-            // Load playlist into editor
-            currentEditingPlaylistId = target.id;
-            currentEditingPlaylistName = target.name;
-            
-            // Fetch playlist items and normalize to staging state
-            const plRes = await fetch('/api/playlists/' + target.id);
-            const plData = await plRes.json();
-            currentPlaylistItems = normalizePlaylistItems(plData.playlist && plData.playlist.items);
-            
-            // Update badge to show what we're editing
-            const badge = document.getElementById('currentEditingBadge');
-            if(badge) badge.textContent = 'Editing: ' + name;
-            
-            const nameTag = document.getElementById('activeNameTag');
-            if(nameTag) nameTag.textContent = name;
-            
-            // Render editor from staged state
-            renderPlaylistEditorFromState();
-            syncCheckboxesFromState();
-        };
-    }
+    // Auto-load playlist into editor whenever the dropdown selection changes
+    document.getElementById('playlistSelector')?.addEventListener('change', async function(){
+        await loadPlaylistByName(this.value);
+    });
 
     const saveBtn = document.getElementById('savePlaylistOrder');
     if(saveBtn){
         saveBtn.onclick = async function(){
             if(!currentEditingPlaylistId){
-                return alert('No playlist selected for editing. Click Edit to load a playlist first.');
+                return alert('No playlist selected. Select a playlist from the dropdown first.');
             }
-            
+
             if(currentPlaylistItems.length === 0){
                 return alert('Playlist is empty. Add items before saving.');
             }
-            
+
+            const schedulerEnabled = !!(document.getElementById('schedulerToggle')?.checked);
+            let schedulerDefault = null;
+            const defSel = document.getElementById('schedulerDefaultPicker');
+            if (schedulerEnabled && defSel && defSel.value) {
+                try { schedulerDefault = JSON.parse(defSel.value); } catch(e) {}
+            }
+
             try{
-                // Save staged items to specific playlist by ID
-                const res = await fetch('/api/playlists/' + currentEditingPlaylistId + '/reorder', {
-                    method:'POST', 
-                    headers:{'Content-Type':'application/json'}, 
-                    body: JSON.stringify({items: currentPlaylistItems})
+                const res = await fetch('/api/playlists/' + currentEditingPlaylistId, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        items: currentPlaylistItems,
+                        scheduler_enabled: schedulerEnabled,
+                        scheduler_default: schedulerDefault
+                    })
                 });
                 const j = await res.json();
                 if(!j.playlist) throw new Error(j.error || 'Failed to save');
@@ -1157,6 +2015,66 @@ document.addEventListener('DOMContentLoaded', ()=>{
             }
         };
     }
+
+    // Wire timezone setting controls and load current timezone immediately
+    wireTimezoneControls();
+    checkServerTimezone();
+
+    // Wire scheduler toggle
+    document.getElementById('schedulerToggle')?.addEventListener('change', function(){
+        currentSchedulerEnabled = this.checked;
+        const controls = document.getElementById('schedulerControls');
+        if(controls) controls.style.display = this.checked ? '' : 'none';
+        startNowPlayingTimer();
+        if (this.checked) startTlNowLine();
+        else { if (tlNowInterval) { clearInterval(tlNowInterval); tlNowInterval = null; } }
+        renderPlaylistEditorFromState();
+    });
+
+    // Wire timeline view tabs (Daily / One-Time)
+    document.querySelectorAll('.tl-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.tl-tab').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            tlCurrentView = btn.dataset.view;
+            const dateWrap = document.getElementById('tlOnceDateWrap');
+            if (dateWrap) dateWrap.style.display = tlCurrentView === 'once' ? 'flex' : 'none';
+            renderTimeline();
+        });
+    });
+
+    // Wire one-time date picker
+    document.getElementById('tlOnceDate')?.addEventListener('change', function(){
+        tlOnceDate = this.value;
+        renderTimeline();
+    });
+    // Default date to today
+    const tlDateInput = document.getElementById('tlOnceDate');
+    if (tlDateInput) tlDateInput.value = new Date().toISOString().slice(0,10);
+    tlOnceDate = new Date().toISOString().slice(0,10);
+
+    // Wire zoom and pan controls
+    document.getElementById('tlZoomIn')?.addEventListener('click', () => doTlZoom(tlZoomStep + 1));
+    document.getElementById('tlZoomOut')?.addEventListener('click', () => doTlZoom(tlZoomStep - 1));
+    document.getElementById('tlZoomSlider')?.addEventListener('input', function() { doTlZoom(+this.value); });
+    document.getElementById('tlPanLeft')?.addEventListener('click', () => doTlPan(-Math.round(tlViewDur() / 4 / 5) * 5));
+    document.getElementById('tlPanRight')?.addEventListener('click', () => doTlPan(Math.round(tlViewDur() / 4 / 5) * 5));
+    document.getElementById('tlGoNow')?.addEventListener('click', () => {
+        const now = new Date();
+        const nowMin = now.getHours() * 60 + now.getMinutes();
+        tlViewStart = clampViewStart(nowMin - tlViewDur() / 2);
+        renderTimeline();
+    });
+    // Click on minimap to pan to that position
+    document.getElementById('tlMinimap')?.addEventListener('click', function(e) {
+        const rect = this.getBoundingClientRect();
+        const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        tlViewStart = clampViewStart(frac * 1440 - tlViewDur() / 2);
+        renderTimeline();
+    });
+
+    // Start now-line ticking if scheduler already on
+    if (currentSchedulerEnabled) startTlNowLine();
 
     // Wire actions - Playlist management buttons
 
@@ -1171,16 +2089,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
             const res = await fetch('/api/playlists', {method:'POST', body: fd});
             const j = await res.json();
             if(!j.id) return alert(j.error||'Failed to create');
-            alert('Created playlist '+name);
-            // reload selector
-            const res2 = await fetch('/api/playlists');
-            const j2 = await res2.json();
-            const sel = document.getElementById('playlistSelector');
-            if(sel){
-                sel.innerHTML='';
-                (j2.playlists||[]).forEach(n=>{ const o=document.createElement('option'); o.value=n.name; o.textContent=n.name; sel.appendChild(o); });
-                sel.value = name;
-            }
+            if(inp) inp.value = '';
+            await refreshPlaylistSelector(name);
+            await loadPlaylistByName(name);
         };
     }
 
@@ -1191,7 +2102,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
             const name = sel && sel.value;
             if(!name) return alert('Select a playlist to delete');
             if(!confirm('Delete playlist '+name+'?')) return;
-            // fetch id by listing
             const listRes = await fetch('/api/playlists');
             const list = await listRes.json();
             const target = (list.playlists||[]).find(p=>p.name===name);
@@ -1199,20 +2109,19 @@ document.addEventListener('DOMContentLoaded', ()=>{
             const res = await fetch('/api/playlists/'+encodeURIComponent(target.id), {method:'DELETE'});
             const j = await res.json();
             if(!j.ok) return alert(j.error||'Failed to delete');
-            alert('Deleted playlist '+name);
-            // reload selector
-            const res2 = await fetch('/api/playlists');
-            const j2 = await res2.json();
-            if(sel){
-                sel.innerHTML='';
-                (j2.playlists||[]).forEach(n=>{ const o=document.createElement('option'); o.value=n.name; o.textContent=n.name; sel.appendChild(o); });
+            sessionStorage.removeItem('lastPlaylistName');
+            const j2 = await refreshPlaylistSelector();
+            // load first available playlist or clear
+            const first = (j2.playlists||[])[0];
+            if(first){ await loadPlaylistByName(first.name); }
+            else {
+                currentEditingPlaylistId = null; currentEditingPlaylistName = null; currentPlaylistItems = [];
+                const badge = document.getElementById('currentEditingBadge');
+                if(badge) badge.textContent = '';
+                const nameTag = document.getElementById('activeNameTag');
+                if(nameTag) nameTag.textContent = '';
+                renderPlaylistEditorFromState();
             }
-            const badge = document.getElementById('currentEditingBadge');
-            if(badge) badge.textContent = 'No playlist selected';
-            currentEditingPlaylistId = null;
-            currentEditingPlaylistName = null;
-            currentPlaylistItems = [];
-            renderPlaylistEditorFromState();
         };
     }
 
@@ -1229,13 +2138,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
             const res = await fetch('/api/playlists/'+encodeURIComponent(target.id)+'/duplicate', {method:'POST'});
             const j = await res.json();
             if(!j.id) return alert(j.error||'Duplicate failed');
-            alert('Duplicated playlist to '+(j.playlist?.name||'copy'));
-            const res2 = await fetch('/api/playlists');
-            const j2 = await res2.json();
-            if(sel){
-                sel.innerHTML='';
-                (j2.playlists||[]).forEach(n=>{ const o=document.createElement('option'); o.value=n.name; o.textContent=n.name; sel.appendChild(o); });
-            }
+            const copyName = j.playlist?.name || 'copy';
+            await refreshPlaylistSelector(copyName);
+            await loadPlaylistByName(copyName);
         };
     }
 
@@ -1254,17 +2159,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
             const res = await fetch('/api/playlists/'+encodeURIComponent(target.id), {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name: newName})});
             const j = await res.json();
             if(!j.playlist) return alert(j.error||'Rename failed');
-            alert('Renamed to '+newName);
-            const res2 = await fetch('/api/playlists');
-            const j2 = await res2.json();
-            if(sel){
-                sel.innerHTML='';
-                (j2.playlists||[]).forEach(n=>{ const o=document.createElement('option'); o.value=n.name; o.textContent=n.name; sel.appendChild(o); });
-                sel.value = newName;
-            }
-            currentEditingPlaylistName = newName;
-            const badge = document.getElementById('currentEditingBadge');
-            if(badge) badge.textContent = 'Editing: ' + newName;
+            await refreshPlaylistSelector(newName);
+            await loadPlaylistByName(newName);
         };
     }
 
@@ -1275,15 +2171,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
 });
 window.addEventListener('pageshow', ()=>{ renderPlaylistEditorFromState(); });
-
-// Auto-refresh playlists list every 5 seconds to show new uploads
-setInterval(async ()=>{ 
-    try{
-        const res = await fetch('/api/playlists');
-        const j = await res.json();
-        // Update selector if needed
-    }catch(e){}
-}, 5000);
 
 // System stats: define functions first, then attach listeners
 function getBarClass(percent){

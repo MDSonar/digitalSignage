@@ -48,8 +48,9 @@ wheels/
 .env
 .env.local
 
-# Documentation
+# Documentation & project guides
 README.md
+SKILL.md
 docs/
 *.md
 

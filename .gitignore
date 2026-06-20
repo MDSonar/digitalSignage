@@ -1,0 +1,53 @@
+# Project skill/agent guide (local only)
+SKILL.md
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+*.egg-info/
+*.egg
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs and databases
+*.log
+*.sql
+*.sqlite
+*.db
+
+# Docker dev overrides
+docker-compose.override.yml
+Dockerfile.dev
+
+# Temporary
+*.tmp
+temp/
+tmp/
+
+# App runtime data (mounted as volumes in Docker)
+content/
+cache/
+logs/
+commands/
+uploads_tmp/
+playlist.json
+playlists.json
+config.json
+youtube_links.json

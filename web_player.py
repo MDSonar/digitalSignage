@@ -65,9 +65,17 @@ def get_active_playlist_path():
     return PLAYLIST_JSON
 
 def get_playlist(selected_id: str = None):
+    """Return (playlist, scheduler_enabled, scheduler_default, raw_items).
+
+    Always returns ALL items regardless of schedule — schedule evaluation is
+    done client-side (web_player.html) so the display device's local clock is
+    used, not the server clock (which may be in a different timezone).
+    """
     playlist = []
-    
-    # read mode config (both|video|presentation)
+    scheduler_enabled = False
+    scheduler_default = None  # raw item dict or None
+    raw_items = []            # raw items from playlists.json (include schedule field)
+
     try:
         mode = 'both'
         if CONFIG_FILE.exists():
@@ -76,22 +84,20 @@ def get_playlist(selected_id: str = None):
     except Exception:
         mode = 'both'
 
-    # If a JSON playlist exists, honor it (selected filenames). It should be a list of filenames
-    # (videos or presentation filenames). Presentations are expanded to their cached slides.
     selected = []
     used_explicit_source = False
     try:
-        # Prefer new playlists.json if present
-        store = read_playlists()
         pid = selected_id or get_active_playlist_id()
         data_list = None
         if pid:
             pl = get_playlist_by_id(pid)
             if pl:
+                scheduler_enabled = bool(pl.get('scheduler_enabled'))
+                scheduler_default = pl.get('scheduler_default')
                 data_list = pl.get('items', [])
+                raw_items = list(data_list)   # keep originals for client
                 used_explicit_source = True
         if data_list is None:
-            # Fallback to legacy file
             pl_path = get_active_playlist_path()
             if pl_path.exists():
                 data_list = json.loads(pl_path.read_text())
@@ -99,7 +105,7 @@ def get_playlist(selected_id: str = None):
         if isinstance(data_list, list):
             for entry in data_list:
                 if isinstance(entry, str):
-                    selected.append({'name': entry, 'repeats': 1})
+                    selected.append({'name': entry, 'repeats': 1, 'schedule': None})
                 elif isinstance(entry, dict):
                     name = entry.get('name') or entry.get('filename') or entry.get('url')
                     try:
@@ -107,40 +113,37 @@ def get_playlist(selected_id: str = None):
                     except Exception:
                         repeats = 1
                     if name:
-                        selected.append({'name': name, 'repeats': max(1, repeats)})
+                        selected.append({
+                            'name': name,
+                            'repeats': max(1, repeats),
+                            'schedule': entry.get('schedule'),  # preserve for client eval
+                        })
     except Exception:
         logger.exception('Failed to read playlist')
 
-    # Build maps
     video_files = {v.name: v for v in get_video_files()}
-    # slides are stored under SLIDES_CACHE_DIR/<presentation_stem>/slide_*.png
     if selected:
         logger.info(f"Using JSON playlist with {len(selected)} entries (web player)")
         for entry in selected:
-            name = entry.get('name')
+            name    = entry.get('name')
             repeats = entry.get('repeats', 1)
-            
-            # Check if name is valid before string operations
             if not name:
                 continue
-            
-            # Check for YouTube URLs
+
             if "youtube.com" in name or "youtu.be" in name:
-                playlist.append({
-                    "type": "youtube",
-                    "url": name,
-                    "name": name
-                })
+                playlist.append({"type": "youtube", "url": name, "name": name,
+                                  "source_name": name})
                 continue
+
             if name in video_files and mode in ('both', 'video'):
                 for _ in range(repeats):
                     playlist.append({
                         'type': 'video',
                         'url': f'/content/videos/{video_files[name].name}',
-                        'name': video_files[name].name
+                        'name': video_files[name].name,
+                        'source_name': name,   # original item name for schedule matching
                     })
             else:
-                # treat as presentation filename; expand to slides by stem
                 stem = Path(name).stem
                 pres_dir = SLIDES_CACHE_DIR / stem
                 if pres_dir.exists() and pres_dir.is_dir() and mode in ('both', 'presentation'):
@@ -151,33 +154,28 @@ def get_playlist(selected_id: str = None):
                                 'type': 'image',
                                 'url': f'/content/slides/{rel.as_posix()}',
                                 'name': slide.name,
-                                'duration': SLIDE_DURATION
+                                'duration': SLIDE_DURATION,
+                                'source_name': name,   # original presentation filename
                             })
     else:
-        # Only auto-scan directories if we did not use playlists.json or legacy file
         if not used_explicit_source:
             for video in get_video_files():
                 if mode in ('both', 'video'):
-                    playlist.append({
-                    'type': 'video',
-                    'url': f'/content/videos/{video.name}',
-                    'name': video.name
-                    })
-            
+                    playlist.append({'type': 'video',
+                                     'url': f'/content/videos/{video.name}',
+                                     'name': video.name, 'source_name': video.name})
             for slide in get_slide_files():
                 if mode in ('both', 'presentation'):
                     relative_path = slide.relative_to(SLIDES_CACHE_DIR)
-                    playlist.append({
-                    'type': 'image',
-                    'url': f'/content/slides/{relative_path.as_posix()}',
-                    'name': slide.name,
-                    'duration': SLIDE_DURATION
-                    })
-    
-    return playlist
+                    playlist.append({'type': 'image',
+                                     'url': f'/content/slides/{relative_path.as_posix()}',
+                                     'name': slide.name, 'duration': SLIDE_DURATION,
+                                     'source_name': relative_path.parts[0] if relative_path.parts else slide.name})
+
+    return playlist, scheduler_enabled, scheduler_default, raw_items
 
 def get_playlist_hash(selected_id: str = None):
-    playlist = get_playlist(selected_id)
+    playlist, _, _, _ = get_playlist(selected_id)
     playlist_str = json.dumps(playlist, sort_keys=True)
     return hashlib.md5(playlist_str.encode()).hexdigest()
 
@@ -209,7 +207,7 @@ def build_playlist_with_durations(selected_id: str = None):
         mode = 'both'
 
     # Use the same source as get_playlist() to respect selected_id
-    base_list = get_playlist(selected_id)
+    base_list, _, _, _ = get_playlist(selected_id)
     for item in base_list:
         if item.get('type') == 'video':
             # derive filename from URL
@@ -277,9 +275,14 @@ def api_playlist():
         playlist_id = request.args.get('playlist_id') or playlist_id
     except Exception:
         pass
+    items, scheduler_enabled, scheduler_default, raw_items = get_playlist(playlist_id)
+    items_hash = hashlib.md5(json.dumps(items, sort_keys=True).encode()).hexdigest()
     return jsonify({
-        'playlist': get_playlist(playlist_id),
-        'hash': get_playlist_hash(playlist_id)
+        'playlist': items,
+        'hash': items_hash,
+        'scheduler_enabled': scheduler_enabled,
+        'scheduler_default': scheduler_default,
+        'raw_items': raw_items,
     })
 
 

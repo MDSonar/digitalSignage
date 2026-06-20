@@ -2,7 +2,7 @@
 FROM python:3.11-slim
 
 # Install system dependencies (minimal set for conversions)
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     libreoffice-impress \
     libreoffice-common \
     # ImageMagick for PDF to PNG conversion
@@ -13,6 +13,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-liberation \
     fonts-dejavu \
     curl \
+    # Timezone data (required for TZ env var to work)
+    tzdata \
     # Cleanup
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*

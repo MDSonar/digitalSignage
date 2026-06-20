@@ -24,7 +24,7 @@ from utils import (
     read_playlists, write_playlists, ensure_playlist_store, get_playlist_by_id,
     create_playlist, update_playlist, delete_playlist, duplicate_playlist,
     set_active_playlist, get_active_playlist_id, reorder_playlists,
-    read_clients, write_clients
+    read_clients, write_clients, read_config, write_config
 )
 
 # Optional: psutil for system stats (graceful degradation if not installed)
@@ -1053,7 +1053,12 @@ def api_playlists_put(pid):
     payload = request.get_json(force=True)
     name = payload.get('name')
     items = payload.get('items')
-    ok, pl = update_playlist(pid, name=name, items=items)
+    kwargs = {}
+    if 'scheduler_enabled' in payload:
+        kwargs['scheduler_enabled'] = bool(payload['scheduler_enabled'])
+    if 'scheduler_default' in payload:
+        kwargs['scheduler_default'] = payload['scheduler_default']
+    ok, pl = update_playlist(pid, name=name, items=items, **kwargs)
     if not ok or not pl:
         return jsonify({'ok': False, 'error': 'update failed'}), 500
     return jsonify({'playlist': pl})
@@ -1200,6 +1205,84 @@ def api_system_stats():
     except Exception:
         logger.exception('Failed to get system stats')
         return jsonify({'ok': False, 'error': 'server error'}), 500
+
+
+@app.route('/api/content')
+@login_required
+def api_content():
+    """Return all available content files for the scheduler default-content picker."""
+    videos = []
+    if VIDEOS_DIR.exists():
+        videos = sorted({
+            f.name
+            for ext in ALLOWED_VIDEO_EXTENSIONS
+            for f in VIDEOS_DIR.glob(f'*{ext}')
+        })
+    presentations = []
+    if PRESENTATIONS_DIR.exists():
+        presentations = sorted({
+            f.name
+            for ext in ALLOWED_PPT_EXTENSIONS
+            for f in PRESENTATIONS_DIR.glob(f'*{ext}')
+        })
+    youtube = []
+    try:
+        yt_data = read_youtube_links()
+        youtube = [{'url': y.get('url'), 'title': y.get('name') or y.get('url')} for y in yt_data if y.get('url')]
+    except Exception:
+        pass
+    return jsonify({'videos': videos, 'presentations': presentations, 'youtube': youtube})
+
+
+@app.route('/api/server_time')
+@login_required
+def api_server_time():
+    """Return current server time in the configured timezone."""
+    from datetime import datetime
+    cfg = read_config()
+    tz_name = (cfg.get('timezone') or os.environ.get('TZ', 'UTC') or 'UTC').strip()
+    try:
+        from zoneinfo import ZoneInfo
+        now = datetime.now(ZoneInfo(tz_name))
+        display_tz = tz_name
+    except Exception:
+        now = datetime.now()
+        display_tz = 'system'
+    return jsonify({
+        'time': now.strftime('%H:%M'),
+        'datetime': now.strftime('%Y-%m-%d %H:%M:%S'),
+        'timezone': display_tz,
+    })
+
+
+@app.route('/api/config', methods=['GET'])
+@login_required
+def api_get_config():
+    """Return current signage configuration (timezone, etc.)."""
+    cfg = read_config()
+    tz_name = (cfg.get('timezone') or os.environ.get('TZ', 'UTC') or 'UTC').strip()
+    return jsonify({'timezone': tz_name})
+
+
+@app.route('/api/config', methods=['POST'])
+@login_required
+def api_set_config():
+    """Update signage configuration. Body: {timezone: 'Asia/Kolkata'}"""
+    data = request.get_json(silent=True) or {}
+    cfg = read_config()
+    if 'timezone' in data:
+        tz = (data['timezone'] or '').strip()
+        if tz:
+            try:
+                from zoneinfo import ZoneInfo
+                ZoneInfo(tz)           # raises if invalid
+                cfg['timezone'] = tz
+            except Exception:
+                return jsonify({'ok': False, 'error': f'Invalid timezone: {tz}'}), 400
+        else:
+            cfg.pop('timezone', None)
+    ok = write_config(cfg)
+    return jsonify({'ok': ok, 'config': cfg})
 
 
 # ---------------------------------------------------------------------------
