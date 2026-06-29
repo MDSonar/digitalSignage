@@ -20,6 +20,17 @@ import json
 from pathlib import PurePath
 import platform
 import hashlib
+import hmac as _hmac
+import threading
+import queue
+import re
+
+try:
+    import requests as _requests
+    HAS_REQUESTS = True
+except ImportError:
+    HAS_REQUESTS = False
+    _requests = None
 from utils import (
     read_playlists, write_playlists, ensure_playlist_store, get_playlist_by_id,
     create_playlist, update_playlist, delete_playlist, duplicate_playlist,
@@ -69,6 +80,9 @@ ALLOWED_VIDEO_EXTENSIONS = {'.mp4', '.avi', '.mov', '.mkv', '.webm'}
 ALLOWED_PPT_EXTENSIONS = {'.pptx', '.ppt', '.pdf'}
 
 USERS = {'admin': generate_password_hash('signage')}
+
+# Background task queue for Slack file ingestion (maxsize=50 buffers bursts)
+_slack_task_queue: queue.Queue = queue.Queue(maxsize=50)
 
 def allowed_file(filename, allowed_extensions):
     return Path(filename).suffix.lower() in allowed_extensions
@@ -1495,6 +1509,362 @@ def api_clients_delete(cid):
         return jsonify({'ok': False, 'error': 'server error'}), 500
 
 
+# ---------------------------------------------------------------------------
+# Power Automate Ingest — receives file + schedule from Power Automate flow
+# ---------------------------------------------------------------------------
+
+@app.route('/api/ingest', methods=['POST'])
+def api_ingest():
+    """
+    Called by Power Automate when a file is shared in Slack.
+    Accepts multipart/form-data OR JSON (base64).
+    No login_required — Power Automate calls this from the cloud via On-premises gateway.
+    Secured by a shared secret key in the X-Ingest-Key header.
+    """
+    # Simple shared-secret auth (set via Settings modal, stored in config)
+    cfg = read_config()
+    expected_key = cfg.get('ingest_api_key', '').strip()
+    if expected_key:
+        provided_key = request.headers.get('X-Ingest-Key', '').strip()
+        if not _hmac.compare_digest(provided_key, expected_key):
+            return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+
+    try:
+        # --- Accept multipart/form-data (Power Automate HTTP with file body) ---
+        if request.content_type and 'multipart/form-data' in request.content_type:
+            f = request.files.get('file')
+            if not f:
+                return jsonify({'ok': False, 'error': 'no file in request'}), 400
+            filename = secure_filename(f.filename or 'upload.pptx')
+            schedule_text = request.form.get('schedule_text', '')
+            channel_id = request.form.get('channel_id', '')
+            file_bytes = f.read()
+
+        # --- Accept JSON with base64-encoded file content ---
+        else:
+            data = request.get_json(silent=True) or {}
+            filename = secure_filename(data.get('filename', 'upload.pptx'))
+            schedule_text = data.get('schedule_text', '')
+            channel_id = data.get('channel_id', '')
+            b64 = data.get('file_content', '')
+            if not b64:
+                return jsonify({'ok': False, 'error': 'file_content missing'}), 400
+            import base64 as _b64
+            try:
+                file_bytes = _b64.b64decode(b64)
+            except Exception:
+                return jsonify({'ok': False, 'error': 'invalid base64'}), 400
+
+        # Validate file type
+        ext = Path(filename).suffix.lower()
+        if ext in {'.pptx', '.ppt', '.pdf'}:
+            subdir = 'presentations'
+        elif ext in {'.mp4', '.avi', '.mov', '.mkv', '.webm'}:
+            subdir = 'videos'
+        else:
+            return jsonify({'ok': False, 'error': f'Unsupported file type: {ext}'}), 400
+
+        # Parse schedule from message text
+        sched = _slack_parse_schedule(schedule_text)
+        if not sched['valid']:
+            return jsonify({
+                'ok': False,
+                'error': 'No schedule found. Add text like: schedule: 14:00-14:30'
+            }), 400
+
+        # Save file to local storage
+        save_path = Path.home() / 'signage' / 'content' / subdir / filename
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        save_path.write_bytes(file_bytes)
+        logger.info(f'Ingest: saved {filename} ({len(file_bytes)} bytes) → {save_path}')
+
+        # Queue background processing (PPT conversion + playlist creation)
+        _slack_task_queue.put_nowait({
+            'event_type': 'power_automate',
+            'local_path': str(save_path),
+            'filename': filename,
+            'schedule': sched,
+            'channel_id': channel_id,
+        })
+
+        return jsonify({
+            'ok': True,
+            'message': f'Received {filename} — converting and scheduling in background',
+            'schedule': f"{sched['start_time']} – {sched['end_time']}",
+        }), 202
+
+    except queue.Full:
+        return jsonify({'ok': False, 'error': 'Server busy — try again in a minute'}), 503
+    except Exception as e:
+        logger.exception('Ingest endpoint error')
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Slack Integration — Settings, Webhook, Background Worker
+# ---------------------------------------------------------------------------
+
+@app.route('/api/settings', methods=['GET'])
+@login_required
+def api_get_settings():
+    """Return current integration settings (tokens masked)."""
+    cfg = read_config()
+    def _mask(v):
+        return ('•' * (len(v) - 4) + v[-4:]) if len(v) > 4 else '•' * len(v)
+    token  = cfg.get('slack_bot_token', '')
+    secret = cfg.get('slack_signing_secret', '')
+    ikey   = cfg.get('ingest_api_key', '')
+    return jsonify({
+        'slack_bot_token':      _mask(token)  if token  else '',
+        'slack_signing_secret': _mask(secret) if secret else '',
+        'slack_channel_id':     cfg.get('slack_channel_id', ''),
+        'ingest_api_key':       _mask(ikey)   if ikey   else '',
+        'slack_configured':     bool(token and secret),
+        'ingest_configured':    bool(ikey),
+    })
+
+
+@app.route('/api/settings', methods=['POST'])
+@login_required
+def api_set_settings():
+    """Save integration settings. Send empty string to clear a field."""
+    data = request.get_json(silent=True) or {}
+    cfg = read_config()
+    for key in ('slack_bot_token', 'slack_signing_secret', 'slack_channel_id', 'ingest_api_key'):
+        if key in data:
+            val = (data[key] or '').strip()
+            # Ignore masked placeholders — only save real values
+            if val and not val.startswith('•'):
+                cfg[key] = val
+            elif not val:
+                cfg.pop(key, None)
+    ok = write_config(cfg)
+    return jsonify({'ok': ok})
+
+
+@app.route('/api/slack/test', methods=['POST'])
+@login_required
+def api_slack_test():
+    """Send a test message to the configured Slack channel."""
+    if not HAS_REQUESTS:
+        return jsonify({'ok': False, 'error': 'requests library not installed'}), 500
+    cfg = read_config()
+    token = cfg.get('slack_bot_token', '').strip()
+    channel = cfg.get('slack_channel_id', '').strip()
+    if not token:
+        return jsonify({'ok': False, 'error': 'Slack Bot Token not configured'}), 400
+    if not channel:
+        return jsonify({'ok': False, 'error': 'Slack Channel ID not configured'}), 400
+    try:
+        resp = _requests.post(
+            'https://slack.com/api/chat.postMessage',
+            headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+            json={'channel': channel, 'text': '✅ Litmus Signage connected successfully! Upload a PPT with a comment like `schedule: 14:00-14:30` to auto-create a playlist.'},
+            timeout=10,
+        )
+        body = resp.json()
+        if body.get('ok'):
+            return jsonify({'ok': True, 'message': 'Test message sent to Slack channel!'})
+        return jsonify({'ok': False, 'error': body.get('error', 'unknown Slack error')})
+    except Exception as e:
+        logger.exception('Slack test connection failed')
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/webhooks/slack', methods=['POST'])
+def webhook_slack():
+    """Receive Slack Events API (file_shared). No login_required — Slack calls this."""
+    raw_body = request.get_data()
+
+    # 1. URL verification challenge (first-time Slack app setup)
+    try:
+        body = json.loads(raw_body)
+    except Exception:
+        return jsonify({'error': 'invalid JSON'}), 400
+
+    if body.get('type') == 'url_verification':
+        return body.get('challenge', ''), 200, {'Content-Type': 'text/plain'}
+
+    # 2. Verify HMAC signature
+    cfg = read_config()
+    signing_secret = cfg.get('slack_signing_secret', '').strip()
+    if signing_secret:
+        ts = request.headers.get('X-Slack-Request-Timestamp', '')
+        sig = request.headers.get('X-Slack-Signature', '')
+        if not ts or not sig:
+            return jsonify({'error': 'missing signature headers'}), 400
+        if abs(time.time() - int(ts)) > 300:
+            return jsonify({'error': 'request too old'}), 401
+        basestring = f'v0:{ts}:{raw_body.decode()}'
+        computed = 'v0=' + _hmac.new(signing_secret.encode(), basestring.encode(), 'sha256').hexdigest()
+        if not _hmac.compare_digest(computed, sig):
+            return jsonify({'error': 'invalid signature'}), 401
+
+    # 3. Queue background task for file_shared events
+    event = body.get('event', {})
+    if event.get('type') == 'file_shared':
+        task = {
+            'file_id': event.get('file_id'),
+            'user_id': event.get('user_id'),
+            'channel_id': event.get('channel_id'),
+            'ts': event.get('ts'),
+        }
+        try:
+            _slack_task_queue.put_nowait(task)
+        except queue.Full:
+            logger.warning('Slack task queue full — dropping event')
+
+    return jsonify({'ok': True}), 200
+
+
+# --- Slack background helpers ---
+
+def _slack_download_file(file_obj: dict, token: str) -> Path:
+    """Download a Slack file to local storage, returns saved path."""
+    filename = file_obj['name']
+    ext = Path(filename).suffix.lower()
+    if ext in {'.pptx', '.ppt', '.pdf'}:
+        subdir = 'presentations'
+    elif ext in {'.mp4', '.avi', '.mov', '.mkv', '.webm'}:
+        subdir = 'videos'
+    else:
+        raise ValueError(f'Unsupported file type: {ext}')
+    save_path = Path.home() / 'signage' / 'content' / subdir / filename
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    url = file_obj.get('url_private_download') or file_obj.get('url_private', '')
+    resp = _requests.get(url, headers={'Authorization': f'Bearer {token}'}, timeout=120)
+    resp.raise_for_status()
+    save_path.write_bytes(resp.content)
+    logger.info(f'Slack file saved → {save_path}')
+    return save_path
+
+
+def _slack_parse_schedule(text: str) -> dict:
+    """Extract HH:MM-HH:MM schedule from free text. Returns {'valid', 'start_time', 'end_time'}."""
+    m = re.search(r'schedule[:\s]+(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})', text, re.IGNORECASE)
+    if not m:
+        return {'valid': False}
+    h1, m1, h2, m2 = (int(x) for x in m.groups())
+    if not (0 <= h1 <= 23 and 0 <= m1 <= 59 and 0 <= h2 <= 23 and 0 <= m2 <= 59):
+        return {'valid': False}
+    return {'valid': True, 'start_time': f'{h1:02d}:{m1:02d}', 'end_time': f'{h2:02d}:{m2:02d}'}
+
+
+def _slack_send_dm(token: str, user_id: str, text: str):
+    """Send a direct message to a Slack user."""
+    try:
+        _requests.post(
+            'https://slack.com/api/chat.postMessage',
+            headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+            json={'channel': user_id, 'text': text},
+            timeout=10,
+        )
+    except Exception:
+        logger.exception('Failed to send Slack DM')
+
+
+def _process_ingest_task(filename: str, save_path: Path, sched: dict):
+    """Shared logic: convert PPT + create scheduled playlist. Called by worker for both sources."""
+    playlist_name = f'Slack: {Path(filename).stem}'
+    logger.info(f'Converting {filename}...')
+    convert_presentation_to_slides(save_path)
+    ok, playlist = create_playlist(
+        name=playlist_name,
+        items=[{
+            'name': filename,
+            'repeats': 1,
+            'schedule': [{
+                'recurrence': 'daily',
+                'start_time': sched['start_time'],
+                'end_time': sched['end_time'],
+            }],
+        }],
+    )
+    if not ok:
+        raise RuntimeError('create_playlist returned not-ok')
+    update_playlist(playlist['id'], scheduler_enabled=True, scheduler_default={'name': filename})
+    logger.info(f"Created playlist '{playlist_name}' scheduled {sched['start_time']}–{sched['end_time']}")
+    return playlist_name
+
+
+def _slack_worker():
+    """Background thread: handles both Slack webhook tasks and Power Automate ingest tasks."""
+    logger.info('Slack/ingest worker thread started')
+    while True:
+        try:
+            task = _slack_task_queue.get(timeout=5)
+        except queue.Empty:
+            continue
+        try:
+            event_type = task.get('event_type', 'file_shared')
+
+            # --- Power Automate path: file already saved locally ---
+            if event_type == 'power_automate':
+                save_path = Path(task['local_path'])
+                filename = task['filename']
+                sched = task['schedule']
+                playlist_name = _process_ingest_task(filename, save_path, sched)
+                logger.info(f'Power Automate ingest complete: {playlist_name}')
+                _slack_task_queue.task_done()
+                continue
+
+            # --- Slack webhook path: download file from Slack API ---
+            cfg = read_config()
+            token = cfg.get('slack_bot_token', '').strip()
+            if not token or not HAS_REQUESTS:
+                logger.warning('Slack bot token not configured — skipping file_shared task')
+                _slack_task_queue.task_done()
+                continue
+
+            file_id = task['file_id']
+            user_id = task.get('user_id', '')
+
+            r = _requests.get(
+                'https://slack.com/api/files.info',
+                headers={'Authorization': f'Bearer {token}'},
+                params={'file': file_id},
+                timeout=15,
+            )
+            info = r.json()
+            if not info.get('ok'):
+                raise RuntimeError(f"files.info error: {info.get('error')}")
+
+            file_obj = info['file']
+            filename = file_obj['name']
+
+            initial_comment = file_obj.get('initial_comment') or {}
+            comment_text = initial_comment.get('comment', '') if isinstance(initial_comment, dict) else str(initial_comment)
+            search_text = ' '.join([file_obj.get('title', ''), comment_text, filename])
+            sched = _slack_parse_schedule(search_text)
+
+            if not sched['valid']:
+                _slack_send_dm(token, user_id,
+                    f"⚠️ *{filename}* uploaded but no schedule found.\n"
+                    "Add a comment like `schedule: 14:00-14:30` to auto-schedule.")
+                _slack_task_queue.task_done()
+                continue
+
+            save_path = _slack_download_file(file_obj, token)
+            playlist_name = _process_ingest_task(filename, save_path, sched)
+            _slack_send_dm(token, user_id,
+                f"✅ *{playlist_name}* created!\n"
+                f"📅 Scheduled *{sched['start_time']} – {sched['end_time']}* daily\n"
+                "🎬 Will play automatically at the scheduled time.")
+
+        except Exception:
+            logger.exception('Worker task failed')
+            try:
+                cfg2 = read_config()
+                tok2 = cfg2.get('slack_bot_token', '').strip()
+                uid2 = task.get('user_id', '')
+                if tok2 and uid2:
+                    _slack_send_dm(tok2, uid2, '❌ Something went wrong. Check the dashboard logs.')
+            except Exception:
+                pass
+        finally:
+            _slack_task_queue.task_done()
+
+
 @app.errorhandler(413)
 def too_large(e):
     flash('File too large! Maximum: 2GB', 'error')
@@ -1509,11 +1879,16 @@ def internal_error(e):
 if __name__ == '__main__':
     VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
     PRESENTATIONS_DIR.mkdir(parents=True, exist_ok=True)
-    
+
+    # Start Slack background worker (daemon so it exits when Flask exits)
+    _t = threading.Thread(target=_slack_worker, daemon=True, name='slack-worker')
+    _t.start()
+
     logger.info("=" * 60)
     logger.info("Starting Dashboard...")
     logger.info(f"Max upload: 2GB")
     logger.info(f"System stats (psutil): {'✓ Available' if HAS_PSUTIL else '✗ Not installed'}")
+    logger.info(f"Slack worker: started (thread={_t.name})")
     logger.info("=" * 60)
-    
+
     app.run(host='0.0.0.0', port=5000, debug=False)

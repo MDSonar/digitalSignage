@@ -398,6 +398,135 @@
                 right: 12px;
             }
         }
+
+        /* ---- Settings gear button ---- */
+        .settings-btn {
+            background: rgba(255,255,255,0.12);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 10px;
+            padding: 8px 12px;
+            font-size: 1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 700;
+            transition: background 0.15s;
+        }
+        .settings-btn:hover { background: rgba(255,255,255,0.22); }
+
+        /* ---- Settings modal ---- */
+        #settingsOverlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(15,23,42,0.55);
+            backdrop-filter: blur(3px);
+            z-index: 9000;
+            align-items: center;
+            justify-content: center;
+        }
+        #settingsOverlay.open { display: flex; }
+        #settingsModal {
+            background: #fff;
+            border-radius: 14px;
+            padding: 0;
+            width: min(560px, 96vw);
+            max-height: 90vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 24px 60px rgba(15,23,42,0.18);
+            position: relative;
+        }
+        .settings-modal-header {
+            padding: 18px 22px 0;
+            flex-shrink: 0;
+        }
+        .settings-modal-header h2 { font-size: 1.05rem; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+        .settings-close {
+            position: absolute; top: 14px; right: 14px;
+            background: none; border: none; font-size: 1.3rem;
+            cursor: pointer; color: var(--muted); line-height: 1;
+        }
+        .settings-close:hover { color: var(--text); }
+
+        /* Tabs */
+        .settings-tabs { display: flex; gap: 0; border-bottom: 2px solid rgba(15,23,42,0.08); }
+        .settings-tab {
+            padding: 8px 18px; font-size: 0.84rem; font-weight: 700; cursor: pointer;
+            border: none; background: none; color: var(--muted);
+            border-bottom: 2px solid transparent; margin-bottom: -2px;
+            transition: color .15s;
+        }
+        .settings-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+        .settings-tab:hover:not(.active) { color: var(--text); }
+
+        /* Tab panels */
+        .settings-tab-body { overflow-y: auto; padding: 18px 22px 20px; flex: 1; }
+        .settings-panel { display: none; }
+        .settings-panel.active { display: block; }
+
+        .settings-section { margin-bottom: 18px; }
+        .settings-section h3 { font-size: 0.82rem; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 1px solid rgba(15,23,42,0.08); }
+        .settings-field { margin-bottom: 11px; }
+        .settings-field label { display: block; font-size: 0.82rem; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+        .settings-field input {
+            width: 100%; padding: 9px 12px; border: 1px solid rgba(15,23,42,0.14);
+            border-radius: 8px; font-size: 0.88rem; color: var(--text);
+            background: #f8fafc; outline: none;
+            font-family: 'Courier New', monospace;
+            transition: border-color 0.15s;
+        }
+        .settings-field input:focus { border-color: var(--accent); background: #fff; }
+        .settings-field .hint { font-size: 0.75rem; color: var(--muted); margin-top: 3px; }
+        .settings-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+        .btn-save-settings {
+            flex: 1; padding: 10px; border: none; border-radius: 8px;
+            background: var(--accent); color: #fff; font-weight: 700;
+            cursor: pointer; font-size: 0.9rem; transition: opacity .15s;
+        }
+        .btn-save-settings:hover { opacity: 0.88; }
+        .btn-test-conn {
+            flex: 1; padding: 10px; border: 1px solid var(--accent); border-radius: 8px;
+            background: #fff; color: var(--accent); font-weight: 700;
+            cursor: pointer; font-size: 0.9rem; transition: background .15s;
+        }
+        .btn-test-conn:hover { background: #eef0fd; }
+        .btn-test-conn:disabled, .btn-save-settings:disabled { opacity: 0.5; cursor: not-allowed; }
+        #settingsStatus {
+            margin-top: 10px; padding: 10px 14px; border-radius: 8px;
+            font-size: 0.85rem; display: none;
+        }
+        #settingsStatus.ok { background: #d1fae5; color: #065f46; display: block; }
+        #settingsStatus.err { background: #fee2e2; color: #991b1b; display: block; }
+        .ngrok-hint { background: #f0f4ff; border: 1px solid #c7d2fe; border-radius: 8px; padding: 10px 12px; font-size: 0.8rem; color: #3730a3; margin-top: 12px; line-height: 1.5; }
+        .ngrok-hint code { background: #e0e7ff; padding: 1px 5px; border-radius: 4px; font-size: 0.78rem; }
+
+        /* Setup Guide styles */
+        .guide-phase { margin-bottom: 14px; border: 1px solid rgba(15,23,42,0.08); border-radius: 10px; overflow: hidden; }
+        .guide-phase-header {
+            background: linear-gradient(90deg, var(--accent), var(--accent-2));
+            color: #fff; padding: 8px 14px;
+            font-size: 0.78rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+        }
+        .guide-phase-body { padding: 12px 14px; }
+        .guide-step { display: flex; gap: 10px; margin-bottom: 12px; }
+        .guide-step:last-child { margin-bottom: 0; }
+        .guide-num {
+            width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff;
+            font-size: 0.72rem; font-weight: 800; display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0; margin-top: 1px;
+        }
+        .guide-step-title { font-size: 0.86rem; font-weight: 700; margin-bottom: 2px; }
+        .guide-step-desc { font-size: 0.79rem; color: #475569; line-height: 1.55; }
+        .guide-code { display: inline-block; background: #e0e7ff; color: #3730a3; border-radius: 4px; padding: 1px 6px; font-family: 'Courier New',monospace; font-size: 0.75rem; }
+        .guide-box { background: #f0f4ff; border: 1px solid #c7d2fe; border-radius: 7px; padding: 8px 11px; font-size: 0.78rem; color: #3730a3; margin-top: 6px; line-height: 1.6; }
+        .guide-box code { background: #ddd6fe; padding: 1px 5px; border-radius: 3px; font-family: 'Courier New',monospace; font-size: 0.74rem; }
+        .guide-ok { background: #d1fae5; border: 1px solid #6ee7b7; border-radius: 7px; padding: 7px 11px; font-size: 0.78rem; color: #065f46; margin-top: 6px; }
+        .guide-warn { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 7px; padding: 8px 11px; font-size: 0.78rem; color: #9a3412; margin-top: 8px; line-height: 1.5; }
+        .guide-err { background: #fee2e2; border: 1px solid #fca5a5; border-radius: 7px; padding: 8px 11px; font-size: 0.79rem; color: #991b1b; margin-top: 8px; line-height: 1.6; }
     </style>
     </style>
 </head>
@@ -419,8 +548,222 @@
                 <h1>🖥️ Litmus Signage Dashboard</h1>
                 <div class="user-info">Logged in as: {{ username }}</div>
             </div>
-            <a href="{{ url_for('logout') }}" class="logout-btn" aria-label="Logout">Logout</a>
+            <div style="display:flex;align-items:center;gap:8px">
+                <button class="settings-btn" onclick="openSettingsModal()" title="Integration Settings">⚙️ Settings</button>
+                <a href="{{ url_for('logout') }}" class="logout-btn" aria-label="Logout">Logout</a>
+            </div>
         </header>
+
+        <!-- Settings Modal -->
+        <div id="settingsOverlay" onclick="if(event.target===this)closeSettingsModal()">
+            <div id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+                <div class="settings-modal-header">
+                    <button class="settings-close" onclick="closeSettingsModal()" aria-label="Close">✕</button>
+                    <h2 id="settingsTitle">⚙️ Integration Settings</h2>
+                    <div class="settings-tabs">
+                        <button class="settings-tab active" onclick="switchSettingsTab('config',this)">🔑 Credentials</button>
+                        <button class="settings-tab" onclick="switchSettingsTab('guide',this)">📖 Setup Guide</button>
+                    </div>
+                </div>
+
+                <div class="settings-tab-body">
+
+                    <!-- TAB 1: Credentials -->
+                    <div id="stab-config" class="settings-panel active">
+                        <div class="settings-section">
+                            <h3>🔔 Slack Integration</h3>
+                            <div class="settings-field">
+                                <label>Bot Token <span style="font-weight:400;color:#94a3b8">(xoxb-…)</span></label>
+                                <input type="password" id="slackBotToken" placeholder="xoxb-your-bot-token" autocomplete="off" />
+                                <div class="hint">Slack App → OAuth &amp; Permissions → Bot User OAuth Token</div>
+                            </div>
+                            <div class="settings-field">
+                                <label>Signing Secret</label>
+                                <input type="password" id="slackSigningSecret" placeholder="Your Slack Signing Secret" autocomplete="off" />
+                                <div class="hint">Slack App → Basic Information → App Credentials → Signing Secret</div>
+                            </div>
+                            <div class="settings-field">
+                                <label>Test Channel ID <span style="font-weight:400;color:#94a3b8">(e.g. C0123ABC456)</span></label>
+                                <input type="text" id="slackChannelId" placeholder="C0123ABC456" autocomplete="off" />
+                                <div class="hint">Right-click channel in Slack → View channel details → Channel ID at bottom</div>
+                            </div>
+                            <div class="settings-field" style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(15,23,42,0.07)">
+                                <label>Ingest API Key <span style="font-weight:400;color:#94a3b8">(Power Automate secret)</span></label>
+                                <input type="password" id="ingestApiKey" placeholder="any-secret-string-you-choose" autocomplete="off" />
+                                <div class="hint">Set any secret key here. Use the same key in Power Automate HTTP header <code style="font-size:0.72rem;background:#f1f5f9;padding:1px 4px;border-radius:3px">X-Ingest-Key</code>. Prevents unauthorized access.</div>
+                            </div>
+                            <div class="settings-actions">
+                                <button class="btn-save-settings" onclick="saveSlackSettings()" id="btnSaveSettings">💾 Save Settings</button>
+                                <button class="btn-test-conn" onclick="testSlackConnection()" id="btnTestConn">🔌 Test Connection</button>
+                            </div>
+                            <div id="settingsStatus"></div>
+                            <div class="ngrok-hint" style="margin-top:14px">
+                                <strong>📡 Webhook URL for Slack Event Subscriptions:</strong><br>
+                                <code>https://&lt;your-ngrok-url&gt;/webhooks/slack</code><br>
+                                Subscribe to <code>file_shared</code> bot event. Upload PPT with comment: <code>schedule: 14:00-14:30</code>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB 2: Setup Guide -->
+                    <div id="stab-guide" class="settings-panel">
+
+                        <!-- Phase 1 -->
+                        <div class="guide-phase">
+                            <div class="guide-phase-header">📦 Phase 1 — Create the Slack App</div>
+                            <div class="guide-phase-body">
+                                <div class="guide-step">
+                                    <div class="guide-num">1</div>
+                                    <div>
+                                        <div class="guide-step-title">Open Slack API portal</div>
+                                        <div class="guide-step-desc">Go to <strong>api.slack.com/apps</strong> → click <strong>Create New App</strong> → choose <strong>From scratch</strong></div>
+                                    </div>
+                                </div>
+                                <div class="guide-step">
+                                    <div class="guide-num">2</div>
+                                    <div>
+                                        <div class="guide-step-title">Name &amp; workspace</div>
+                                        <div class="guide-step-desc">App Name: <span class="guide-code">Litmus Signage</span> → select your company workspace → click <strong>Create App</strong></div>
+                                    </div>
+                                </div>
+                                <div class="guide-step">
+                                    <div class="guide-num">3</div>
+                                    <div>
+                                        <div class="guide-step-title">Copy Signing Secret (do this first)</div>
+                                        <div class="guide-step-desc">Left sidebar → <strong>Basic Information</strong> → scroll to <strong>App Credentials</strong> → click <strong>Show</strong> next to Signing Secret → copy it</div>
+                                        <div class="guide-ok">✅ Paste into <strong>Signing Secret</strong> field in Credentials tab</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Phase 2 -->
+                        <div class="guide-phase">
+                            <div class="guide-phase-header">🔑 Phase 2 — Add Scopes &amp; Install App</div>
+                            <div class="guide-phase-body">
+                                <div class="guide-step">
+                                    <div class="guide-num">4</div>
+                                    <div>
+                                        <div class="guide-step-title">Add Bot Token Scopes</div>
+                                        <div class="guide-step-desc">Left sidebar → <strong>OAuth &amp; Permissions</strong> → scroll to <strong>Scopes</strong> → <strong>Bot Token Scopes</strong> → Add each:</div>
+                                        <div class="guide-box">
+                                            <code>files:read</code> — download uploaded files<br>
+                                            <code>chat:write</code> — send DM replies to users<br>
+                                            <code>channels:join</code> — join channels to receive events<br>
+                                            <code>im:write</code> — open DM conversations
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="guide-step">
+                                    <div class="guide-num">5</div>
+                                    <div>
+                                        <div class="guide-step-title">Install App to Workspace</div>
+                                        <div class="guide-step-desc">Scroll to the <strong>top</strong> of OAuth &amp; Permissions page → click <strong>Install to Workspace</strong> → click <strong>Allow</strong></div>
+                                        <div class="guide-err">
+                                            <strong>⚠️ Button shows "Request to Workspace Install Submitted"?</strong><br>
+                                            Your workspace requires admin approval. Two options:<br>
+                                            1. If you're the admin: go to <span class="guide-code">your-workspace.slack.com/apps/manage</span> → <strong>Pending Requests</strong> → Approve<br>
+                                            2. Ask your Slack workspace admin to approve the install request
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="guide-step">
+                                    <div class="guide-num">6</div>
+                                    <div>
+                                        <div class="guide-step-title">Copy Bot Token</div>
+                                        <div class="guide-step-desc">After install, <strong>Bot User OAuth Token</strong> appears — starts with <span class="guide-code">xoxb-</span> → copy it</div>
+                                        <div class="guide-ok">✅ Paste into <strong>Bot Token</strong> field in Credentials tab</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Phase 3 -->
+                        <div class="guide-phase">
+                            <div class="guide-phase-header">📡 Phase 3 — Enable File Upload Events</div>
+                            <div class="guide-phase-body">
+                                <div class="guide-step">
+                                    <div class="guide-num">7</div>
+                                    <div>
+                                        <div class="guide-step-title">Start ngrok tunnel</div>
+                                        <div class="guide-step-desc">On your desktop (outside Docker), run:</div>
+                                        <div class="guide-box"><code>ngrok http 5000</code><br>Copy the <strong>https://xxxx.ngrok.io</strong> URL shown</div>
+                                    </div>
+                                </div>
+                                <div class="guide-step">
+                                    <div class="guide-num">8</div>
+                                    <div>
+                                        <div class="guide-step-title">Set Webhook URL in Slack</div>
+                                        <div class="guide-step-desc">Left sidebar → <strong>Event Subscriptions</strong> → toggle <strong>Enable Events ON</strong><br>Paste into Request URL:</div>
+                                        <div class="guide-box"><code>https://xxxx.ngrok.io/webhooks/slack</code><br>Slack will verify it — Flask must be running ✓</div>
+                                    </div>
+                                </div>
+                                <div class="guide-step">
+                                    <div class="guide-num">9</div>
+                                    <div>
+                                        <div class="guide-step-title">Subscribe to file_shared event</div>
+                                        <div class="guide-step-desc">Under <strong>Subscribe to bot events</strong> → <strong>Add Bot User Event</strong> → search and add:</div>
+                                        <div class="guide-box"><code>file_shared</code> — fires when a file is uploaded to a channel</div>
+                                        <div class="guide-step-desc" style="margin-top:6px">Click <strong>Save Changes</strong></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Phase 4 -->
+                        <div class="guide-phase">
+                            <div class="guide-phase-header">🆔 Phase 4 — Channel ID &amp; Bot Invite</div>
+                            <div class="guide-phase-body">
+                                <div class="guide-step">
+                                    <div class="guide-num">10</div>
+                                    <div>
+                                        <div class="guide-step-title">Get Channel ID</div>
+                                        <div class="guide-step-desc">In Slack, right-click your channel (e.g. <strong>#signage-integration-gcc</strong>) → <strong>View channel details</strong> → scroll to very bottom → copy Channel ID (looks like <span class="guide-code">C08XXXXXX</span>)</div>
+                                        <div class="guide-ok">✅ Paste into <strong>Test Channel ID</strong> field in Credentials tab</div>
+                                    </div>
+                                </div>
+                                <div class="guide-step">
+                                    <div class="guide-num">11</div>
+                                    <div>
+                                        <div class="guide-step-title">Invite bot to the channel</div>
+                                        <div class="guide-step-desc">Inside <strong>#signage-integration-gcc</strong>, type in the message box:</div>
+                                        <div class="guide-box"><code>/invite @Litmus Signage</code></div>
+                                        <div class="guide-step-desc" style="margin-top:5px">The bot must be in the channel to receive file events and post replies.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Phase 5 -->
+                        <div class="guide-phase">
+                            <div class="guide-phase-header">✅ Phase 5 — Test &amp; Go Live</div>
+                            <div class="guide-phase-body">
+                                <div class="guide-step">
+                                    <div class="guide-num">12</div>
+                                    <div>
+                                        <div class="guide-step-title">Save credentials &amp; test</div>
+                                        <div class="guide-step-desc">Go to <strong>Credentials</strong> tab → fill all 3 fields → <strong>Save Settings</strong> → <strong>Test Connection</strong><br>A message should appear in your Slack channel ✓</div>
+                                    </div>
+                                </div>
+                                <div class="guide-step">
+                                    <div class="guide-num">13</div>
+                                    <div>
+                                        <div class="guide-step-title">Upload a PPT with schedule comment</div>
+                                        <div class="guide-step-desc">In <strong>#signage-integration-gcc</strong>, upload any .pptx file and add a message:</div>
+                                        <div class="guide-box"><code>schedule: 14:00-14:30</code></div>
+                                        <div class="guide-step-desc" style="margin-top:5px">You'll get a DM confirming the playlist was created and scheduled automatically.</div>
+                                    </div>
+                                </div>
+                                <div class="guide-warn">
+                                    ⚠️ <strong>ngrok URL changes on each restart.</strong> When ngrok restarts, update the Request URL in Slack Event Subscriptions (Step 8). Get a free static ngrok domain at dashboard.ngrok.com → Domains to avoid this.
+                                </div>
+                            </div>
+                        </div>
+
+                    </div><!-- /stab-guide -->
+                </div><!-- /settings-tab-body -->
+            </div>
+        </div>
 
         <!-- Global timezone bar — always visible, not tied to scheduler -->
         <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:7px 18px;background:rgba(255,255,255,0.92);border-bottom:1px solid rgba(15,23,42,0.07);font-size:0.82rem">
@@ -2515,6 +2858,113 @@ document.addEventListener('DOMContentLoaded', ()=>{
     setInterval(fetchSystemStats, 5000);
 });
 
+
+// ---- Settings Modal ----
+
+function switchSettingsTab(id, btn) {
+    document.querySelectorAll('.settings-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.settings-tab').forEach(b => b.classList.remove('active'));
+    document.getElementById('stab-' + id).classList.add('active');
+    btn.classList.add('active');
+}
+
+function openSettingsModal() {
+    document.getElementById('settingsOverlay').classList.add('open');
+    document.getElementById('settingsStatus').className = '';
+    document.getElementById('settingsStatus').textContent = '';
+    // Load current (masked) values from backend
+    fetch('/api/settings').then(r => r.json()).then(d => {
+        document.getElementById('slackBotToken').placeholder = d.slack_bot_token || 'xoxb-your-bot-token';
+        document.getElementById('slackSigningSecret').placeholder = d.slack_signing_secret || 'Your Slack Signing Secret';
+        document.getElementById('slackChannelId').value = d.slack_channel_id || '';
+        document.getElementById('ingestApiKey').placeholder = d.ingest_api_key || 'any-secret-string-you-choose';
+    }).catch(() => {});
+}
+
+function closeSettingsModal() {
+    document.getElementById('settingsOverlay').classList.remove('open');
+}
+
+async function saveSlackSettings() {
+    const btn = document.getElementById('btnSaveSettings');
+    const status = document.getElementById('settingsStatus');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+    status.className = '';
+
+    const payload = {
+        slack_bot_token: document.getElementById('slackBotToken').value.trim(),
+        slack_signing_secret: document.getElementById('slackSigningSecret').value.trim(),
+        slack_channel_id: document.getElementById('slackChannelId').value.trim(),
+        ingest_api_key: document.getElementById('ingestApiKey').value.trim(),
+    };
+
+    try {
+        const r = await fetch('/api/settings', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload),
+        });
+        const d = await r.json();
+        if (d.ok) {
+            status.className = 'ok';
+            status.textContent = '✅ Settings saved successfully!';
+            // Clear inputs so masked values show in placeholder next open
+            document.getElementById('slackBotToken').value = '';
+            document.getElementById('slackSigningSecret').value = '';
+        } else {
+            status.className = 'err';
+            status.textContent = '❌ ' + (d.error || 'Save failed');
+        }
+    } catch (e) {
+        status.className = 'err';
+        status.textContent = '❌ Network error';
+    }
+    btn.disabled = false;
+    btn.textContent = '💾 Save Settings';
+}
+
+async function testSlackConnection() {
+    const btn = document.getElementById('btnTestConn');
+    const status = document.getElementById('settingsStatus');
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+    status.className = '';
+
+    // Auto-save any filled values first
+    const token = document.getElementById('slackBotToken').value.trim();
+    const secret = document.getElementById('slackSigningSecret').value.trim();
+    const channel = document.getElementById('slackChannelId').value.trim();
+    if (token || secret || channel) {
+        await fetch('/api/settings', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ slack_bot_token: token, slack_signing_secret: secret, slack_channel_id: channel }),
+        });
+    }
+
+    try {
+        const r = await fetch('/api/slack/test', { method: 'POST' });
+        const d = await r.json();
+        if (d.ok) {
+            status.className = 'ok';
+            status.textContent = '✅ ' + (d.message || 'Test message sent!');
+        } else {
+            status.className = 'err';
+            status.textContent = '❌ ' + (d.error || 'Test failed');
+        }
+    } catch (e) {
+        status.className = 'err';
+        status.textContent = '❌ Network error — is the server running?';
+    }
+    btn.disabled = false;
+    btn.textContent = '🔌 Test Connection';
+}
+
+// Close modal on Escape key
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeSettingsModal();
+});
 </script>
 </body>
 </html>
