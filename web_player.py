@@ -6,14 +6,15 @@ Digital Signage Web Player
 - Auto-refresh when content changes
 """
 
-from flask import Flask, render_template, send_from_directory, jsonify
+from flask import Flask, render_template, send_from_directory, jsonify, request
 from pathlib import Path
 import logging
 import json
 import hashlib
 import time
 import os
-from utils import read_playlists, get_playlist_by_id, get_active_playlist_id
+import uuid as _uuid_mod
+from utils import read_playlists, get_playlist_by_id, get_active_playlist_id, read_clients, write_clients
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -356,10 +357,105 @@ def serve_video(filename):
 def serve_slide(filename):
     return send_from_directory(SLIDES_CACHE_DIR, filename)
 
+# ---------------------------------------------------------------------------
+# Browser Device Registration — lets any browser register as a managed display
+# ---------------------------------------------------------------------------
+
+@app.route('/api/device/register', methods=['POST'])
+def api_device_register():
+    """Register (or re-register) a browser display. Called on first visit."""
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or 'Browser Display').strip()[:60]
+    device_id = (data.get('device_id') or '').strip()
+    client_ip = (data.get('client_ip') or '').strip()
+    ip = client_ip or request.remote_addr
+
+    if not device_id:
+        device_id = str(_uuid_mod.uuid4())
+
+    store = read_clients()
+    clients = store.get('clients', [])
+    now = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+
+    existing = next((c for c in clients if c.get('id') == device_id), None)
+    if existing:
+        existing['name'] = name
+        existing['ip'] = ip
+        existing['last_seen'] = now
+        existing['client_type'] = 'browser'
+    else:
+        clients.append({
+            'id': device_id,
+            'mac': device_id,          # UUID serves as MAC-equivalent for browsers
+            'name': name,
+            'ip': ip,
+            'hostname': 'browser',
+            'client_type': 'browser',
+            'agent_version': 'web',
+            'assigned_playlist_id': None,
+            'pending_command': None,
+            'registered_at': now,
+            'last_seen': now,
+            'stats': {},
+        })
+
+    store['clients'] = clients
+    write_clients(store)
+
+    assigned_pid = existing.get('assigned_playlist_id') if existing else None
+    return jsonify({'ok': True, 'device_id': device_id, 'name': name,
+                    'assigned_playlist_id': assigned_pid})
+
+
+@app.route('/api/device/heartbeat', methods=['POST'])
+def api_device_heartbeat():
+    """Browser sends heartbeat every 30 s; response carries latest assignment."""
+    data = request.get_json(silent=True) or {}
+    device_id = (data.get('device_id') or '').strip()
+    if not device_id:
+        return jsonify({'ok': False, 'error': 'device_id required'}), 400
+
+    store = read_clients()
+    client = next((c for c in store.get('clients', []) if c.get('id') == device_id), None)
+    if not client:
+        return jsonify({'ok': False, 'reregister': True})
+
+    client['last_seen'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+    client_ip = (data.get('client_ip') or '').strip()
+    client['ip'] = client_ip or request.remote_addr
+    write_clients(store)
+
+    return jsonify({'ok': True, 'assigned_playlist_id': client.get('assigned_playlist_id')})
+
+
+@app.route('/api/device/playlist')
+def api_device_playlist():
+    """Return the playlist currently assigned to a browser device."""
+    device_id = request.args.get('device_id', '').strip()
+    if not device_id:
+        return jsonify({'error': 'device_id required'}), 400
+
+    store = read_clients()
+    client = next((c for c in store.get('clients', []) if c.get('id') == device_id), None)
+    if not client:
+        return jsonify({'error': 'unknown device', 'reregister': True}), 404
+
+    pid = client.get('assigned_playlist_id')
+    if not pid:
+        return jsonify({'assigned': False, 'playlist': [], 'hash': '',
+                        'scheduler_enabled': False, 'scheduler_default': None, 'raw_items': []})
+
+    items, sched_en, sched_def, raw = get_playlist(pid)
+    h = hashlib.md5(json.dumps(items, sort_keys=True).encode()).hexdigest()
+    return jsonify({'assigned': True, 'assigned_playlist_id': pid, 'playlist': items, 'hash': h,
+                    'scheduler_enabled': sched_en, 'scheduler_default': sched_def,
+                    'raw_items': raw})
+
+
 if __name__ == '__main__':
     logger.info("=" * 60)
     logger.info("Starting Web Player for Network TVs")
     logger.info("TVs should open: http://<pi-ip>:8080")
     logger.info("=" * 60)
-    
+
     app.run(host='0.0.0.0', port=8080, debug=False)

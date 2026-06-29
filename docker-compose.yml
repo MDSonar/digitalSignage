@@ -41,7 +41,7 @@ services:
       # Share same content and cache as dashboard
       - signage-content:/root/signage/content:ro
       - signage-cache:/root/signage/cache:ro
-      - signage-data:/root/signage:ro
+      - signage-data:/root/signage    # writable: device register/heartbeat writes clients.json
     env_file:
       - path: .env
         required: false

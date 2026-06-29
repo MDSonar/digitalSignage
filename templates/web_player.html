@@ -178,9 +178,78 @@
             transform: scale(1.08);
         }
 
+        /* ---- Device Registration Screen ---- */
+        #device-registration, #waiting-assignment {
+            position: fixed; inset: 0;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            z-index: 500; padding: 40px;
+        }
+        #device-registration.hidden, #waiting-assignment.hidden { display: none; }
+        .reg-logo { font-size: 3.5rem; margin-bottom: 12px; }
+        .reg-title { font-size: 2rem; font-weight: 800; margin-bottom: 8px; text-align: center; }
+        .reg-sub { font-size: 1rem; opacity: 0.6; margin-bottom: 36px; text-align: center; }
+        .reg-form { display: flex; flex-direction: column; gap: 14px; width: min(420px, 90vw); }
+        .reg-form input {
+            padding: 16px 20px; border-radius: 12px; border: 2px solid rgba(255,255,255,0.15);
+            background: rgba(255,255,255,0.08); color: #fff; font-size: 1.1rem;
+            outline: none; text-align: center; transition: border-color .2s;
+        }
+        .reg-form input::placeholder { color: rgba(255,255,255,0.35); }
+        .reg-form input:focus { border-color: #556ee6; background: rgba(255,255,255,0.12); }
+        .reg-btn {
+            padding: 16px; border-radius: 12px; border: none;
+            background: linear-gradient(90deg, #556ee6, #6b5dd8);
+            color: #fff; font-size: 1.1rem; font-weight: 700; cursor: pointer;
+            transition: opacity .15s; margin-top: 4px;
+        }
+        .reg-btn:hover { opacity: 0.88; }
+        .reg-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+        .reg-skip { font-size: 0.85rem; opacity: 0.45; cursor: pointer; margin-top: 10px;
+                    text-decoration: underline; text-align: center; }
+        .reg-skip:hover { opacity: 0.7; }
+        .reg-err { color: #f87171; font-size: 0.88rem; text-align: center; min-height: 20px; }
+        /* Waiting screen */
+        .wait-pulse {
+            width: 70px; height: 70px; border-radius: 50%;
+            border: 4px solid rgba(86,99,235,0.3);
+            border-top-color: #556ee6;
+            animation: spin 1.2s linear infinite;
+            margin-bottom: 24px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .wait-title { font-size: 1.6rem; font-weight: 700; margin-bottom: 10px; text-align: center; }
+        .wait-sub { opacity: 0.55; text-align: center; font-size: 0.95rem; line-height: 1.6; }
+        .wait-device-info { margin-top: 20px; opacity: 0.35; font-size: 0.78rem; font-family: monospace; }
+
     </style>
 </head>
 <body>
+    <!-- Device Registration Screen (first-time only) -->
+    <div id="device-registration" class="hidden">
+        <div class="reg-logo">🖥️</div>
+        <div class="reg-title">Register This Display</div>
+        <div class="reg-sub">Give this screen a name so it can be managed from the dashboard</div>
+        <div class="reg-form">
+            <input id="reg-name-input" type="text" placeholder="e.g. Reception TV, Meeting Room 1" maxlength="60" />
+            <div id="reg-err" class="reg-err"></div>
+            <button class="reg-btn" id="reg-submit-btn" onclick="submitRegistration()">Register Display →</button>
+        </div>
+        <div class="reg-skip" onclick="skipRegistration()">Skip — use playlist selection instead</div>
+    </div>
+
+    <!-- Waiting for Assignment Screen -->
+    <div id="waiting-assignment" class="hidden">
+        <div class="wait-pulse"></div>
+        <div class="wait-title">Display Registered ✓</div>
+        <div class="wait-sub">
+            Waiting for a playlist to be assigned from the dashboard.<br>
+            Open the Litmus Signage Dashboard → Connected Clients → assign a playlist to this display.
+        </div>
+        <div class="wait-device-info" id="wait-device-info"></div>
+    </div>
+
     <!-- Playlist Selection Screen -->
     <div id="playlist-selection">
         <h1>🖥️ Litmus Signage Player</h1>
@@ -953,11 +1022,208 @@
         // ===== INITIALIZE =====
         // Prevent context menu
         document.oncontextmenu = () => false;
-        
-        // Load playlists on page load
-        loadPlaylists();
-        
-        console.log('Ready - Playlist selection mode');
+
+        // ===== DEVICE REGISTRATION =====
+        const DEVICE_ID_KEY   = 'signage.device_id';
+        const DEVICE_NAME_KEY = 'signage.device_name';
+
+        // Detect the browser's own LAN IP via WebRTC (avoids Docker bridge IP)
+        function getLocalIp() {
+            return new Promise(resolve => {
+                try {
+                    const pc = new RTCPeerConnection({iceServers: []});
+                    pc.createDataChannel('');
+                    pc.createOffer().then(o => pc.setLocalDescription(o)).catch(() => resolve(null));
+                    pc.onicecandidate = e => {
+                        if (!e || !e.candidate) return;
+                        const m = e.candidate.candidate.match(/\b(\d{1,3}(?:\.\d{1,3}){3})\b/);
+                        if (m && !m[1].startsWith('127.') && !m[1].startsWith('169.254.')) {
+                            resolve(m[1]); pc.close();
+                        }
+                    };
+                    setTimeout(() => resolve(null), 1500);
+                } catch(e) { resolve(null); }
+            });
+        }
+
+        const regScreen     = document.getElementById('device-registration');
+        const waitScreen    = document.getElementById('waiting-assignment');
+        const waitInfo      = document.getElementById('wait-device-info');
+
+        let currentDeviceId   = null;
+        let heartbeatInterval = null;
+        let assignPollInterval = null;
+
+        function _readDeviceId() {
+            try { return localStorage.getItem(DEVICE_ID_KEY) || null; } catch(e) { return null; }
+        }
+        function _saveDeviceId(id, name) {
+            try {
+                localStorage.setItem(DEVICE_ID_KEY, id);
+                localStorage.setItem(DEVICE_NAME_KEY, name);
+            } catch(e) {}
+        }
+        function _clearDeviceId() {
+            try { localStorage.removeItem(DEVICE_ID_KEY); localStorage.removeItem(DEVICE_NAME_KEY); } catch(e) {}
+        }
+
+        async function initDevice() {
+            const storedId = _readDeviceId();
+
+            if (!storedId) {
+                // First visit — show registration form
+                regScreen.classList.remove('hidden');
+                const inp = document.getElementById('reg-name-input');
+                inp.addEventListener('keydown', e => { if (e.key === 'Enter') submitRegistration(); });
+                inp.focus();
+                return;
+            }
+
+            // Already registered — send heartbeat, check assignment
+            currentDeviceId = storedId;
+            const result = await _heartbeat();
+            if (result && result.reregister) {
+                // Device was wiped from server — re-register
+                _clearDeviceId();
+                return initDevice();
+            }
+            const assignedPid = result && result.assigned_playlist_id;
+            if (assignedPid) {
+                _startDevicePlayback(assignedPid);
+            } else {
+                _showWaiting();
+            }
+        }
+
+        async function submitRegistration() {
+            const inp = document.getElementById('reg-name-input');
+            const btn = document.getElementById('reg-submit-btn');
+            const err = document.getElementById('reg-err');
+            const name = inp.value.trim();
+
+            if (!name) { err.textContent = 'Please enter a name for this display.'; return; }
+
+            btn.disabled = true; btn.textContent = 'Registering…'; err.textContent = '';
+
+            try {
+                const clientIp = await getLocalIp();
+                const res = await fetch('/api/device/register', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ name, client_ip: clientIp }),
+                });
+                const data = await res.json();
+                if (!data.ok) throw new Error(data.error || 'Registration failed');
+
+                _saveDeviceId(data.device_id, data.name);
+                currentDeviceId = data.device_id;
+                regScreen.classList.add('hidden');
+
+                if (data.assigned_playlist_id) {
+                    _startDevicePlayback(data.assigned_playlist_id);
+                } else {
+                    _showWaiting();
+                }
+            } catch(e) {
+                err.textContent = '❌ ' + e.message;
+                btn.disabled = false; btn.textContent = 'Register Display →';
+            }
+        }
+
+        function skipRegistration() {
+            regScreen.classList.add('hidden');
+            loadPlaylists();
+        }
+
+        function _showWaiting() {
+            waitScreen.classList.remove('hidden');
+            playlistSelection.classList.add('hidden');
+            const name = (() => { try { return localStorage.getItem(DEVICE_NAME_KEY) || ''; } catch(e) { return ''; } })();
+            waitInfo.textContent = `Device: ${name}  •  ID: ${currentDeviceId}`;
+
+            // Poll every 8 s until a playlist is assigned
+            assignPollInterval = setInterval(async () => {
+                const res = await fetch(`/api/device/playlist?device_id=${encodeURIComponent(currentDeviceId)}`);
+                const data = await res.json();
+                if (data.assigned && data.playlist && data.playlist.length > 0) {
+                    clearInterval(assignPollInterval);
+                    assignPollInterval = null;
+                    waitScreen.classList.add('hidden');
+                    _startDevicePlayback(data.assigned_playlist_id || null, data);
+                }
+            }, 8000);
+
+            _startHeartbeat();
+        }
+
+        function _startDevicePlayback(assignedPid, prefetchedData) {
+            // Stop any waiting poll
+            if (assignPollInterval) { clearInterval(assignPollInterval); assignPollInterval = null; }
+
+            // Resolve the playlist ID — may come directly or from prefetched response
+            const pid = assignedPid || (prefetchedData && prefetchedData.assigned_playlist_id) || null;
+            _deviceAssignedPid = pid;
+            _devicePrefetched  = prefetchedData || null;
+
+            // Hide selection screens, run playback
+            waitScreen.classList.add('hidden');
+            regScreen.classList.add('hidden');
+            if (pid) {
+                selectedPlaylistId = pid;
+                selectedSource = 'device';
+            }
+            startPlayback();
+            _startHeartbeat();
+        }
+
+        let _deviceAssignedPid = null;
+        let _devicePrefetched  = null;
+
+        function _startHeartbeat() {
+            if (heartbeatInterval) return;
+            heartbeatInterval = setInterval(async () => {
+                try {
+                    const result = await _heartbeat();
+                    if (!result) return;
+                    if (result.reregister) {
+                        clearInterval(heartbeatInterval); heartbeatInterval = null;
+                        _clearDeviceId(); location.reload(); return;
+                    }
+                    const newPid = result.assigned_playlist_id;
+                    // If assignment changed while playing, reload to switch playlist
+                    if (newPid && newPid !== _deviceAssignedPid) {
+                        _deviceAssignedPid = newPid; location.reload();
+                    }
+                } catch(e) {}
+            }, 30000);
+        }
+
+        let _cachedLocalIp = null;
+        async function _heartbeat() {
+            if (!currentDeviceId) return null;
+            try {
+                if (!_cachedLocalIp) _cachedLocalIp = await getLocalIp();
+                const res = await fetch('/api/device/heartbeat', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ device_id: currentDeviceId, client_ip: _cachedLocalIp }),
+                });
+                return await res.json();
+            } catch(e) { return null; }
+        }
+
+        // Patch fetchPlaylist so device-mode uses device endpoint instead of global one
+        const _origFetchPlaylist = window._fetchPlaylistOverride;
+        async function _deviceAwareFetch() {
+            if (!currentDeviceId) return null;
+            const res = await fetch(`/api/device/playlist?device_id=${encodeURIComponent(currentDeviceId)}`);
+            return await res.json();
+        }
+
+        // Start — check device registration first, then fall back to playlist selection
+        initDevice().catch(() => loadPlaylists());
+
+        console.log('Ready - Device registration mode');
     </script>
 </body>
 </html>
