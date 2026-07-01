@@ -8,6 +8,7 @@ Digital Signage Web Player
 
 from flask import Flask, render_template, send_from_directory, jsonify, request
 from pathlib import Path
+from datetime import datetime
 import logging
 import json
 import hashlib
@@ -15,6 +16,9 @@ import time
 import os
 import uuid as _uuid_mod
 from utils import read_playlists, get_playlist_by_id, get_active_playlist_id, read_clients, write_clients
+from scheduler_engine import SchedulerEngine
+
+_scheduler = SchedulerEngine()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -22,6 +26,16 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 CONFIG_FILE = Path.home() / 'signage' / 'config.json'
+SCHEDULES_FILE = Path.home() / 'signage' / 'schedules.json'
+
+
+def read_schedules():
+    if SCHEDULES_FILE.exists():
+        try:
+            return json.loads(SCHEDULES_FILE.read_text(encoding='utf-8'))
+        except Exception:
+            pass
+    return {'schedules': []}
 
 # Legacy default playlist file; multi-playlist uses config 'activePlaylist'
 PLAYLIST_JSON = Path.home() / 'signage' / 'playlist.json'
@@ -428,6 +442,8 @@ def api_device_heartbeat():
     return jsonify({'ok': True, 'assigned_playlist_id': client.get('assigned_playlist_id')})
 
 
+
+
 @app.route('/api/device/playlist')
 def api_device_playlist():
     """Return the playlist currently assigned to a browser device."""
@@ -441,9 +457,54 @@ def api_device_playlist():
         return jsonify({'error': 'unknown device', 'reregister': True}), 404
 
     pid = client.get('assigned_playlist_id')
-    if not pid:
+    sch_id = client.get('assigned_schedule_id')
+
+    if not pid and not sch_id:
         return jsonify({'assigned': False, 'playlist': [], 'hash': '',
                         'scheduler_enabled': False, 'scheduler_default': None, 'raw_items': []})
+
+    if sch_id:
+        now = datetime.now()
+        store = read_schedules()
+        schedule = next((s for s in store.get('schedules', []) if s['id'] == sch_id), None)
+        schedule_name = schedule['name'] if schedule else 'Schedule'
+
+        matching_block = None
+        next_block = None
+
+        if schedule:
+            blocks = schedule.get('blocks', [])
+            matching_block = _scheduler.get_current_block(blocks, now)
+            if matching_block is None:
+                next_block = _scheduler.get_next_block_today(blocks, now)
+
+        if matching_block:
+            content_type = matching_block.get('content_type', 'playlist')
+            if content_type == 'playlist' and matching_block.get('playlist_id'):
+                items, sched_en, sched_def, raw = get_playlist(matching_block['playlist_id'])
+                h = hashlib.md5(json.dumps(items, sort_keys=True).encode()).hexdigest()
+                return jsonify({'assigned': True, 'assigned_playlist_id': matching_block['playlist_id'],
+                                'playlist': items, 'hash': h, 'scheduler_enabled': False,
+                                'scheduler_default': None, 'raw_items': raw,
+                                'schedule_mode': True, 'schedule_name': schedule_name,
+                                'block_title': matching_block.get('title', '')})
+            elif content_type == 'media' and matching_block.get('media_name'):
+                media_name = matching_block['media_name']
+                ext = Path(media_name).suffix.lower()
+                if ext in ['.mp4', '.avi', '.mov', '.mkv', '.webm', '.m4v', '.wmv', '.flv']:
+                    url = f'/video/{media_name}'
+                    item = {'name': media_name, 'type': 'video', 'url': url, 'repeats': 1}
+                else:
+                    url = f'/slides/{media_name}'
+                    item = {'name': media_name, 'type': 'slide', 'url': url, 'repeats': 1}
+                h = hashlib.md5(json.dumps([item], sort_keys=True).encode()).hexdigest()
+                return jsonify({'assigned': True, 'playlist': [item], 'hash': h,
+                                'scheduler_enabled': False, 'scheduler_default': None, 'raw_items': [],
+                                'schedule_mode': True, 'schedule_name': schedule_name})
+
+        return jsonify({'assigned': False, 'playlist': [], 'hash': '',
+                        'schedule_mode': True, 'schedule_name': schedule_name,
+                        'next_block': next_block})
 
     items, sched_en, sched_def, raw = get_playlist(pid)
     h = hashlib.md5(json.dumps(items, sort_keys=True).encode()).hexdigest()

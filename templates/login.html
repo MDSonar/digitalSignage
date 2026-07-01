@@ -1,116 +1,334 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Litmus Signage</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        /* Logo positioning: top-left, fixed, responsive */
-        .logo-watermark {
-            position: fixed;
-            top: 20px;
-            left: 20px;
-            z-index: 10;
-            opacity: 0.85;
-        }
-        
-        .logo-watermark img {
-            max-width: 120px;
-            height: auto;
-            display: block;
-        }
-        
-        .login-container {
-            background: white;
-            padding: 40px;
-            border-radius: 12px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-            width: 100%;
-            max-width: 400px;
-            position: relative;
-            z-index: 20;
-        }
-        h1 { text-align: center; color: #333; margin-bottom: 30px; font-size: 2em; }
-        .form-group { margin-bottom: 20px; }
-        label { display: block; margin-bottom: 5px; color: #555; font-weight: 500; }
-        input {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #ddd;
-            border-radius: 8px;
-            font-size: 1em;
-        }
-        input:focus { outline: none; border-color: #667eea; }
-        button {
-            width: 100%;
-            padding: 12px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 1em;
-            font-weight: bold;
-            cursor: pointer;
-        }
-        .flash { padding: 12px; border-radius: 8px; margin-bottom: 20px; text-align: center; }
-        .flash.error { background: #fee; color: #c00; border: 1px solid #fcc; }
-        .flash.success { background: #efe; color: #0a0; border: 1px solid #cfc; }
-        
-        /* Mobile responsive: adjust logo size and position */
-        @media (max-width: 600px) {
-            .logo-watermark {
-                top: 12px;
-                left: 12px;
-            }
-            .logo-watermark img {
-                max-width: 80px;
-            }
-            .login-container {
-                padding: 30px 20px;
-                margin: 0 12px;
-            }
-            h1 { font-size: 1.6em; }
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login – Litmus Signage</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      background: #0b0d16;
+    }
+
+    /* ── Left branding panel ── */
+    .brand-panel {
+      width: 420px;
+      flex-shrink: 0;
+      background: linear-gradient(160deg, #1a1830 0%, #221f3d 60%, #2d1b5e 100%);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 40px 44px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .brand-panel::before {
+      content: '';
+      position: absolute;
+      top: -120px;
+      right: -80px;
+      width: 340px;
+      height: 340px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(91,80,240,.28) 0%, transparent 70%);
+    }
+
+    .brand-panel::after {
+      content: '';
+      position: absolute;
+      bottom: -100px;
+      left: -60px;
+      width: 280px;
+      height: 280px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(124,131,255,.18) 0%, transparent 70%);
+    }
+
+    .brand-logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .brand-logo img {
+      height: 36px;
+      width: auto;
+    }
+
+    .brand-logo-fallback {
+      width: 36px;
+      height: 36px;
+      border-radius: 9px;
+      background: linear-gradient(135deg, #5b50f0, #7c83ff);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .brand-logo-text {
+      font-size: 17px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.3px;
+    }
+
+    .brand-center {
+      position: relative;
+      z-index: 1;
+    }
+
+    .brand-icon-wrap {
+      width: 72px;
+      height: 72px;
+      border-radius: 20px;
+      background: linear-gradient(135deg, rgba(91,80,240,.35), rgba(124,131,255,.2));
+      border: 1px solid rgba(91,80,240,.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 28px;
+    }
+
+    .brand-heading {
+      font-size: 28px;
+      font-weight: 800;
+      color: #fff;
+      line-height: 1.25;
+      letter-spacing: -0.5px;
+      margin-bottom: 14px;
+    }
+
+    .brand-heading span {
+      background: linear-gradient(90deg, #7c83ff, #a5b4fc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .brand-desc {
+      font-size: 14px;
+      color: rgba(255,255,255,.5);
+      line-height: 1.6;
+      max-width: 280px;
+    }
+
+    .brand-features {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .brand-feature {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: rgba(255,255,255,.55);
+    }
+
+    .brand-feature-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #5b50f0;
+      flex-shrink: 0;
+    }
+
+    /* ── Right form panel ── */
+    .form-panel {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #f4f5f9;
+      padding: 40px 24px;
+    }
+
+    .form-card {
+      width: 100%;
+      max-width: 400px;
+    }
+
+    .form-header {
+      margin-bottom: 32px;
+    }
+
+    .form-header h1 {
+      font-size: 24px;
+      font-weight: 800;
+      color: #181b27;
+      letter-spacing: -0.4px;
+      margin-bottom: 6px;
+    }
+
+    .form-header p {
+      font-size: 14px;
+      color: #5a6076;
+    }
+
+    .flash {
+      padding: 11px 14px;
+      border-radius: 9px;
+      margin-bottom: 18px;
+      font-size: 13.5px;
+      font-weight: 500;
+    }
+
+    .flash.error {
+      background: #fef2f2;
+      color: #c0392b;
+      border: 1px solid #fecaca;
+    }
+
+    .flash.success {
+      background: #f0fdf4;
+      color: #166534;
+      border: 1px solid #bbf7d0;
+    }
+
+    .form-group {
+      margin-bottom: 18px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #181b27;
+      margin-bottom: 7px;
+    }
+
+    input[type="text"],
+    input[type="password"] {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1.5px solid #e9ebf2;
+      border-radius: 9px;
+      font-family: inherit;
+      font-size: 14px;
+      color: #181b27;
+      background: #fff;
+      transition: border-color .15s, box-shadow .15s;
+      outline: none;
+    }
+
+    input[type="text"]:focus,
+    input[type="password"]:focus {
+      border-color: #5b50f0;
+      box-shadow: 0 0 0 3px rgba(91,80,240,.12);
+    }
+
+    .btn-login {
+      width: 100%;
+      padding: 11px 20px;
+      background: #5b50f0;
+      color: #fff;
+      border: none;
+      border-radius: 9px;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background .15s, transform .1s;
+      margin-top: 6px;
+    }
+
+    .btn-login:hover { background: #4a40d8; }
+    .btn-login:active { transform: scale(.99); }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      body { flex-direction: column; }
+
+      .brand-panel {
+        width: 100%;
+        padding: 28px 24px 32px;
+        flex-direction: row;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .brand-center, .brand-features { display: none; }
+
+      .form-panel { padding: 32px 20px; }
+    }
+  </style>
 </head>
 <body>
-    <!-- Logo watermark -->
-    <div class="logo-watermark">
-        <img src="/static/logo/logo.png" alt="Company Logo">
+
+  <!-- Left branding panel -->
+  <div class="brand-panel">
+    <div class="brand-logo">
+      <img src="/static/logo/logo.png" alt="Litmus Signage"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+      <div class="brand-logo-fallback" style="display:none">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="3" width="20" height="14" rx="2"/>
+          <path d="M8 21h8M12 17v4"/>
+        </svg>
+      </div>
+      <span class="brand-logo-text">Litmus Signage</span>
     </div>
-    
-    <div class="login-container">
-        <h1>🖥️ Litmus Signage</h1>
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="flash {{ category }}">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-        <form method="POST">
-            <div class="form-group">
-                <label for="username">Username</label>
-                <input type="text" id="username" name="username" required autofocus>
-            </div>
-            <div class="form-group">
-                <label for="password">Password</label>
-                <input type="password" id="password" name="password" required>
-            </div>
-            <button type="submit">Login</button>
-        </form>
+
+    <div class="brand-center">
+      <div class="brand-icon-wrap">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(124,131,255,.9)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="3" width="20" height="14" rx="2"/>
+          <path d="M8 21h8M12 17v4"/>
+          <path d="M6 8l3 3 3-3 3 3" stroke-width="1.5"/>
+        </svg>
+      </div>
+      <h2 class="brand-heading">Digital Signage<br><span>Made Simple</span></h2>
+      <p class="brand-desc">Manage displays, schedule playlists, and push content to all your screens from one place.</p>
     </div>
+
+    <div class="brand-features">
+      <div class="brand-feature"><span class="brand-feature-dot"></span>Manage unlimited displays</div>
+      <div class="brand-feature"><span class="brand-feature-dot"></span>Schedule playlists by time</div>
+      <div class="brand-feature"><span class="brand-feature-dot"></span>Videos, slides &amp; YouTube</div>
+    </div>
+  </div>
+
+  <!-- Right login form -->
+  <div class="form-panel">
+    <div class="form-card">
+      <div class="form-header">
+        <h1>Welcome back</h1>
+        <p>Sign in to your Litmus Signage dashboard</p>
+      </div>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      <form method="POST">
+        <div class="form-group">
+          <label for="username">Username</label>
+          <input type="text" id="username" name="username" required autofocus placeholder="Enter your username">
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" required placeholder="Enter your password">
+        </div>
+        <button type="submit" class="btn-login">Sign in</button>
+      </form>
+    </div>
+  </div>
+
 </body>
 </html>

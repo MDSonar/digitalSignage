@@ -35,6 +35,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY dashboard.py .
 COPY web_player.py .
 COPY utils.py .
+COPY recurrence_engine.py .
+COPY scheduler_engine.py .
 COPY templates/ ./templates/
 COPY entrypoint.sh .
 RUN chmod +x /app/entrypoint.sh

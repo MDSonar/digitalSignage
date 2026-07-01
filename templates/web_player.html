@@ -250,6 +250,17 @@
         <div class="wait-device-info" id="wait-device-info"></div>
     </div>
 
+    <!-- Schedule Standby Screen (assigned to schedule but no block active right now) -->
+    <div id="schedule-standby" class="hidden" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#0b0d1a;color:#fff;font-family:'Plus Jakarta Sans',sans-serif;text-align:center;padding:40px">
+        <div style="width:64px;height:64px;border-radius:18px;background:linear-gradient(135deg,#5b50f0,#7c83ff);display:flex;align-items:center;justify-content:center;margin-bottom:28px">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        </div>
+        <div id="sch-standby-name" style="font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.45);margin-bottom:10px">Schedule</div>
+        <div id="sch-standby-clock" style="font-size:72px;font-weight:800;letter-spacing:-3px;line-height:1;margin-bottom:8px">--:--</div>
+        <div id="sch-standby-date" style="font-size:16px;color:rgba(255,255,255,.5);margin-bottom:32px">—</div>
+        <div id="sch-standby-next" style="font-size:14px;color:rgba(255,255,255,.45);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:12px 22px">Nothing else scheduled today</div>
+    </div>
+
     <!-- Playlist Selection Screen -->
     <div id="playlist-selection">
         <h1>🖥️ Litmus Signage Player</h1>
@@ -1135,6 +1146,46 @@
             loadPlaylists();
         }
 
+        let _schStandbyClock = null;
+
+        function _showScheduleStandby(scheduleName, nextBlock) {
+            const standby = document.getElementById('schedule-standby');
+            if (!standby) return;
+            waitScreen.classList.add('hidden');
+            standby.classList.remove('hidden');
+            standby.style.display = 'flex';
+
+            document.getElementById('sch-standby-name').textContent = scheduleName || 'Schedule';
+
+            if (nextBlock) {
+                document.getElementById('sch-standby-next').textContent =
+                    `Next: ${nextBlock.title}  at  ${nextBlock.start_time}`;
+            } else {
+                document.getElementById('sch-standby-next').textContent = 'Nothing else scheduled today';
+            }
+
+            // Live clock
+            if (_schStandbyClock) clearInterval(_schStandbyClock);
+            function _tick() {
+                const n = new Date();
+                const hh = String(n.getHours()).padStart(2,'0');
+                const mm = String(n.getMinutes()).padStart(2,'0');
+                document.getElementById('sch-standby-clock').textContent = `${hh}:${mm}`;
+                const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+                const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                document.getElementById('sch-standby-date').textContent =
+                    `${days[n.getDay()]}, ${n.getDate()} ${months[n.getMonth()]} ${n.getFullYear()}`;
+            }
+            _tick();
+            _schStandbyClock = setInterval(_tick, 10000);
+        }
+
+        function _hideScheduleStandby() {
+            const standby = document.getElementById('schedule-standby');
+            if (standby) { standby.classList.add('hidden'); standby.style.display = 'none'; }
+            if (_schStandbyClock) { clearInterval(_schStandbyClock); _schStandbyClock = null; }
+        }
+
         function _showWaiting() {
             waitScreen.classList.remove('hidden');
             playlistSelection.classList.add('hidden');
@@ -1149,7 +1200,12 @@
                     clearInterval(assignPollInterval);
                     assignPollInterval = null;
                     waitScreen.classList.add('hidden');
+                    _hideScheduleStandby();
                     _startDevicePlayback(data.assigned_playlist_id || null, data);
+                } else if (data.schedule_mode) {
+                    // Schedule assigned — show standby clock when no block is active
+                    waitScreen.classList.add('hidden');
+                    _showScheduleStandby(data.schedule_name, data.next_block || null);
                 }
             }, 8000);
 

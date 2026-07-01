@@ -20,6 +20,8 @@ import json
 from pathlib import PurePath
 import platform
 import hashlib
+from datetime import date as _date
+from recurrence_engine import fields_to_rrule
 import hmac as _hmac
 import threading
 import queue
@@ -1124,6 +1126,152 @@ def api_playlists_reorder_list():
     ok = reorder_playlists(order)
     return jsonify({'ok': ok})
 
+
+# ── Display Schedules ────────────────────────────────────────────────────────
+
+SCHEDULES_FILE = Path.home() / 'signage' / 'schedules.json'
+
+
+def read_schedules():
+    if SCHEDULES_FILE.exists():
+        try:
+            return json.loads(SCHEDULES_FILE.read_text(encoding='utf-8'))
+        except Exception:
+            pass
+    return {'schedules': []}
+
+
+def write_schedules(data):
+    SCHEDULES_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding='utf-8')
+
+
+@app.route('/api/schedules', methods=['GET'])
+@login_required
+def api_schedules_list():
+    return jsonify(read_schedules())
+
+
+@app.route('/api/schedules', methods=['POST'])
+@login_required
+def api_schedules_create():
+    data = request.get_json(force=True) or {}
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'ok': False, 'error': 'name required'}), 400
+    store = read_schedules()
+    sid = 'sch_' + hashlib.md5(f"{name}{time.time()}".encode()).hexdigest()[:8]
+    schedule = {'id': sid, 'name': name, 'blocks': []}
+    store['schedules'].append(schedule)
+    write_schedules(store)
+    return jsonify({'ok': True, 'schedule': schedule})
+
+
+@app.route('/api/schedules/<sid>', methods=['PUT'])
+@login_required
+def api_schedules_update(sid):
+    data = request.get_json(force=True) or {}
+    store = read_schedules()
+    sch = next((s for s in store.get('schedules', []) if s['id'] == sid), None)
+    if not sch:
+        return jsonify({'ok': False, 'error': 'not found'}), 404
+    if 'name' in data:
+        sch['name'] = (data['name'] or '').strip()
+    write_schedules(store)
+    return jsonify({'ok': True, 'schedule': sch})
+
+
+@app.route('/api/schedules/<sid>', methods=['DELETE'])
+@login_required
+def api_schedules_delete(sid):
+    store = read_schedules()
+    store['schedules'] = [s for s in store.get('schedules', []) if s['id'] != sid]
+    write_schedules(store)
+    try:
+        cs = read_clients()
+        for c in cs.get('clients', []):
+            if c.get('assigned_schedule_id') == sid:
+                c['assigned_schedule_id'] = None
+        write_clients(cs)
+    except Exception:
+        pass
+    return jsonify({'ok': True})
+
+
+def _block_from_data(data: dict, existing: dict = None) -> dict:
+    """Build a block dict from request data, computing recurrence_rule."""
+    repeat_type = data.get('recurrence') or data.get('repeat_type') or 'weekly'
+    start_date = data.get('start_date') or ''
+    end_date = data.get('end_date') or ''
+    no_end_date = bool(data.get('no_end_date')) or (repeat_type == 'once') or not end_date
+    days = data.get('days') or []
+    rrule = fields_to_rrule(repeat_type, days, start_date)
+
+    base = existing or {}
+    base.update({
+        'title': data.get('title', base.get('title', '')),
+        'enabled': data.get('enabled', base.get('enabled', True)),
+        'priority': int(data.get('priority', base.get('priority', 0))),
+        'repeat_type': repeat_type,
+        'recurrence_rule': rrule,
+        'start_date': start_date,
+        'end_date': end_date if not no_end_date else '',
+        'no_end_date': no_end_date,
+        'days': days,
+        'start_time': data.get('start_time', base.get('start_time', '08:00')),
+        'end_time': data.get('end_time', base.get('end_time', '09:00')),
+        'content_type': data.get('content_type', base.get('content_type', 'playlist')),
+        'playlist_id': data.get('playlist_id') or base.get('playlist_id', ''),
+        'playlist_name': data.get('playlist_name') or base.get('playlist_name', ''),
+        'media_name': data.get('media_name') or base.get('media_name', ''),
+        'color': data.get('color') or base.get('color', '#5b50f0'),
+    })
+    return base
+
+
+@app.route('/api/schedules/<sid>/blocks', methods=['POST'])
+@login_required
+def api_schedules_add_block(sid):
+    data = request.get_json(force=True) or {}
+    store = read_schedules()
+    sch = next((s for s in store.get('schedules', []) if s['id'] == sid), None)
+    if not sch:
+        return jsonify({'ok': False, 'error': 'not found'}), 404
+    bid = 'blk_' + hashlib.md5(f"{sid}{time.time()}".encode()).hexdigest()[:8]
+    block = _block_from_data(data)
+    block['id'] = bid
+    sch.setdefault('blocks', []).append(block)
+    write_schedules(store)
+    return jsonify({'ok': True, 'block': block})
+
+
+@app.route('/api/schedules/<sid>/blocks/<bid>', methods=['PUT'])
+@login_required
+def api_schedules_update_block(sid, bid):
+    data = request.get_json(force=True) or {}
+    store = read_schedules()
+    sch = next((s for s in store.get('schedules', []) if s['id'] == sid), None)
+    if not sch:
+        return jsonify({'ok': False, 'error': 'not found'}), 404
+    block = next((b for b in sch.get('blocks', []) if b['id'] == bid), None)
+    if not block:
+        return jsonify({'ok': False, 'error': 'block not found'}), 404
+    _block_from_data(data, block)
+    write_schedules(store)
+    return jsonify({'ok': True, 'block': block})
+
+
+@app.route('/api/schedules/<sid>/blocks/<bid>', methods=['DELETE'])
+@login_required
+def api_schedules_delete_block(sid, bid):
+    store = read_schedules()
+    sch = next((s for s in store.get('schedules', []) if s['id'] == sid), None)
+    if not sch:
+        return jsonify({'ok': False, 'error': 'not found'}), 404
+    sch['blocks'] = [b for b in sch.get('blocks', []) if b['id'] != bid]
+    write_schedules(store)
+    return jsonify({'ok': True})
+
+
 @app.route('/delete/<content_type>/<filename>', methods=['POST'])
 @login_required
 def delete_file(content_type, filename):
@@ -1436,15 +1584,17 @@ def api_clients_list():
 @app.route('/api/clients/<cid>/assign', methods=['POST'])
 @login_required
 def api_clients_assign(cid):
-    """Assign a playlist to a client."""
+    """Assign a playlist or schedule to a client."""
     try:
         data = request.get_json(force=True) or {}
-        pid = data.get('playlist_id')  # may be None to unassign
+        pid = data.get('playlist_id')
+        sid = data.get('schedule_id') or None
         store = read_clients()
         client = next((c for c in store.get('clients', []) if c['id'] == cid), None)
         if not client:
             return jsonify({'ok': False, 'error': 'unknown client'}), 404
         client['assigned_playlist_id'] = pid
+        client['assigned_schedule_id'] = sid
         write_clients(store)
         return jsonify({'ok': True})
     except Exception:
