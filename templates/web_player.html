@@ -1521,6 +1521,7 @@
         }
 
         let _schStandbyClock = null;
+        let _standbyActive   = false;  // prevents re-init on every 8-s assign-poll tick
 
         // ── Idle Cards state ──────────────────────────────────────
         let _idleCards        = [];
@@ -1606,7 +1607,7 @@
                 old.classList.add('is-next');
                 void old.offsetWidth;         // force reflow before re-enabling transition
                 old.style.transition = '';
-            }, 440);
+            }, 520);  // must be > 450ms CSS transition to avoid snapping mid-animation
         }
 
         function _startIdleRotation() {
@@ -1738,6 +1739,25 @@
             standby.classList.remove('hidden');
             standby.style.display = '';
 
+            // The assign-poll calls this every 8 s while in schedule-standby mode.
+            // Only do a full init on the FIRST call; subsequent calls just refresh
+            // the labels and clock in-place so the rotation timer is never reset.
+            if (_standbyActive) {
+                _idleClockTick();
+                const nm = document.getElementById('sch-standby-name');
+                const nx = document.getElementById('sch-standby-next');
+                if (nm) nm.textContent = scheduleName || 'Schedule';
+                if (nx) nx.textContent = nextBlock
+                    ? `Next: ${nextBlock.title}  at  ${nextBlock.start_time}`
+                    : 'Nothing else scheduled today';
+                const nxEl = document.getElementById('idle-cards-next-label');
+                if (nxEl) nxEl.textContent = nextBlock
+                    ? `Next: ${nextBlock.title}  at  ${nextBlock.start_time}`
+                    : '';
+                return;
+            }
+            _standbyActive = true;
+
             // Start ticker + auto-fullscreen (idempotent)
             initTicker().catch(() => {});
 
@@ -1753,6 +1773,7 @@
         }
 
         function _hideScheduleStandby() {
+            _standbyActive = false;
             const standby = document.getElementById('schedule-standby');
             if (standby) { standby.classList.add('hidden'); standby.style.display = 'none'; }
             if (_schStandbyClock)  { clearInterval(_schStandbyClock);  _schStandbyClock  = null; }
