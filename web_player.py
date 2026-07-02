@@ -17,8 +17,10 @@ import os
 import uuid as _uuid_mod
 from utils import read_playlists, get_playlist_by_id, get_active_playlist_id, read_clients, write_clients
 from scheduler_engine import SchedulerEngine
+from ticker_engine import TickerEngine
 
 _scheduler = SchedulerEngine()
+_ticker = TickerEngine()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -511,6 +513,39 @@ def api_device_playlist():
     return jsonify({'assigned': True, 'assigned_playlist_id': pid, 'playlist': items, 'hash': h,
                     'scheduler_enabled': sched_en, 'scheduler_default': sched_def,
                     'raw_items': raw})
+
+
+@app.route('/api/news/active')
+def api_news_active():
+    """Public endpoint — returns active ticker messages for web players."""
+    try:
+        return jsonify({'ok': True, 'messages': _ticker.get_all_messages()})
+    except Exception:
+        logger.exception('Ticker fetch failed')
+        return jsonify({'ok': True, 'messages': []})
+
+
+_TICKER_DEFAULTS = {
+    'ticker_enabled':    False,
+    'ticker_position':   'bottom',
+    'ticker_speed':      'normal',
+    'ticker_height':     'medium',
+    'ticker_bg_color':   '#1e293b',
+    'ticker_text_color': '#ffffff',
+    'ticker_show_live':  True,
+    'auto_fullscreen':   False,
+}
+
+
+@app.route('/api/clients/<cid>/ticker')
+def api_ticker_get(cid):
+    """Public endpoint — returns per-display ticker settings for web players."""
+    store = read_clients()
+    client = next((c for c in store.get('clients', []) if c['id'] == cid), None)
+    if not client:
+        return jsonify({'ok': False, 'error': 'not found'}), 404
+    ticker = {**_TICKER_DEFAULTS, **(client.get('ticker_settings') or {})}
+    return jsonify({'ok': True, 'ticker': ticker})
 
 
 if __name__ == '__main__':

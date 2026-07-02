@@ -107,26 +107,33 @@
             font-size: 0.9em;
         }
         
+        /* Ticker layout tokens — updated by JS when ticker is initialised */
+        :root {
+            --ticker-h:   0px;   /* height reserved for ticker bar  */
+            --ticker-top: 0px;   /* top offset when ticker is at top */
+        }
+
         /* Player Container */
         #player-container {
             position: fixed;
-            top: 0;
+            top: var(--ticker-top);
             left: 0;
             width: 100vw;
-            height: 100vh;
+            height: calc(100vh - var(--ticker-h));
             display: flex;
             align-items: center;
             justify-content: center;
             background: #000;
+            transition: top 0.25s ease, height 0.25s ease;
         }
-        
+
         video, img, iframe#youtube-player {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            object-fit: cover;
+            object-fit: contain;
             border: none;
         }
         
@@ -140,15 +147,14 @@
             text-align: center;
         }
 
-        /* Player overlay controls (back + fullscreen) */
+        /* Player overlay controls — top-right, never behind ticker */
         #player-controls {
             position: fixed;
-            bottom: 24px;
-            left: 50%;
-            transform: translateX(-50%);
+            top: 20px;
+            right: 20px;
             z-index: 1000;
             display: flex;
-            gap: 12px;
+            gap: 10px;
             align-items: center;
             opacity: 0;
             pointer-events: none;
@@ -159,23 +165,53 @@
             pointer-events: auto;
         }
         .player-ctrl-btn {
-            width: 52px;
-            height: 52px;
+            width: 48px;
+            height: 48px;
             border: none;
-            border-radius: 14px;
+            border-radius: 12px;
             background: rgba(15,23,42,0.75);
             color: #fff;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.45);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
             transition: background 0.15s, transform 0.12s;
         }
         .player-ctrl-btn:hover {
             background: rgba(86,99,235,0.85);
             transform: scale(1.08);
+        }
+
+        /* Fullscreen prompt — shown when auto-fullscreen is blocked by browser */
+        #fs-prompt {
+            position: fixed;
+            bottom: 90px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9500;
+            background: rgba(86,99,235,0.93);
+            color: #fff;
+            padding: 14px 26px;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            gap: 10px;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+            white-space: nowrap;
+            animation: fs-pulse 2.4s ease-in-out infinite;
+            user-select: none;
+        }
+        @keyframes fs-pulse {
+            0%, 100% { opacity: 1; transform: translateX(-50%) scale(1); }
+            50%       { opacity: 0.85; transform: translateX(-50%) scale(1.025); }
         }
 
         /* ---- Device Registration Screen ---- */
@@ -222,6 +258,92 @@
         .wait-title { font-size: 1.6rem; font-weight: 700; margin-bottom: 10px; text-align: center; }
         .wait-sub { opacity: 0.55; text-align: center; font-size: 0.95rem; line-height: 1.6; }
         .wait-device-info { margin-top: 20px; opacity: 0.35; font-size: 0.78rem; font-family: monospace; }
+
+        /* ── News Ticker ─────────────────────────────────────── */
+        #ticker-overlay {
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            z-index: 9000;
+            overflow: hidden;
+            display: none;
+            pointer-events: none;
+        }
+        #ticker-overlay.ticker-top { top: 0; bottom: auto; }
+        #ticker-overlay.ticker-sm  { height: 34px; }
+        #ticker-overlay.ticker-md  { height: 46px; }
+        #ticker-overlay.ticker-lg  { height: 62px; }
+
+        #ticker-inner {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            border-top: 1px solid rgba(255,255,255,0.07);
+        }
+        #ticker-overlay.ticker-top #ticker-inner {
+            border-top: none;
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+        }
+
+        #ticker-live-badge {
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 0.7rem;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            color: #ef4444;
+            padding: 0 14px;
+            border-right: 1px solid rgba(255,255,255,0.1);
+            height: 100%;
+            white-space: nowrap;
+            background: rgba(239,68,68,0.06);
+        }
+        .ticker-live-dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            background: #ef4444;
+            animation: ticker-blink 1.2s ease-in-out infinite;
+        }
+        @keyframes ticker-blink {
+            0%, 100% { opacity: 1; }
+            50%       { opacity: 0.25; }
+        }
+
+        #ticker-track-wrapper {
+            flex: 1;
+            overflow: hidden;
+            height: 100%;
+            position: relative;
+        }
+        #ticker-track {
+            display: inline-flex;
+            align-items: center;
+            height: 100%;
+            white-space: nowrap;
+            will-change: transform;
+            position: absolute;
+            left: 0; top: 0;
+        }
+        .ticker-msg {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0 24px;
+            letter-spacing: 0.01em;
+        }
+        .ticker-msg-title {
+            font-weight: 700;
+            opacity: 0.95;
+        }
+        .ticker-msg-text { opacity: 0.78; }
+        .ticker-sep {
+            opacity: 0.3;
+            font-size: 1.1em;
+            padding: 0 6px;
+        }
 
     </style>
 </head>
@@ -279,23 +401,39 @@
         </div>
     </div>
 
-    <!-- Player overlay: back + fullscreen — hidden until pointer moves -->
+    <!-- Player overlay: fullscreen only — hidden until pointer moves, top-right corner -->
     <div id="player-controls" class="hidden">
-        <button class="player-ctrl-btn" id="switch-playlist-btn" title="Back to playlist selection">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M19 12H5M12 19l-7-7 7-7"/>
-            </svg>
-        </button>
         <button class="player-ctrl-btn" id="fullscreen-btn" title="Toggle fullscreen">
-            <svg id="fs-icon-enter" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <svg id="fs-icon-enter" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/>
             </svg>
-            <svg id="fs-icon-exit" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+            <svg id="fs-icon-exit" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:none">
                 <path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3"/>
             </svg>
         </button>
     </div>
 
+    <!-- Auto-fullscreen prompt — appears when browser blocks auto-fullscreen -->
+    <div id="fs-prompt" onclick="_handleFsPromptClick()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/>
+        </svg>
+        Tap to enter fullscreen
+    </div>
+
+
+    <!-- News Ticker Overlay -->
+    <div id="ticker-overlay">
+        <div id="ticker-inner">
+            <div id="ticker-live-badge">
+                <span class="ticker-live-dot"></span>
+                LIVE
+            </div>
+            <div id="ticker-track-wrapper">
+                <div id="ticker-track"></div>
+            </div>
+        </div>
+    </div>
 
     <script src="https://www.youtube.com/iframe_api"></script>
 
@@ -440,18 +578,6 @@
             document.body.classList.add('playing');
             playerControls.classList.remove('hidden');
             startActivityTimer();
-
-            // Enter fullscreen on first playback start only
-            if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-                try {
-                    const elem = document.documentElement;
-                    if (elem.requestFullscreen) {
-                        elem.requestFullscreen().catch(() => {});
-                    } else if (elem.webkitRequestFullscreen) {
-                        elem.webkitRequestFullscreen();
-                    }
-                } catch (_) {}
-            }
             updateFsIcon();
 
             // Start player loop
@@ -480,31 +606,103 @@
         let youtubeStartTs = null;
         let youtubeMaxMs = null;
         let imageTimeout = null;
-        
+        let _mediaGeneration = 0;   // incremented by stopCurrentMedia(); guards stale callbacks
+
         const videoPlayer = document.getElementById('video-player');
         const imagePlayer = document.getElementById('image-player');
         const loading = document.getElementById('loading');
         const youtubeContainer = document.getElementById('youtube-container');
         const youtubeIframe = document.getElementById('youtube-player');
         const playerControls = document.getElementById('player-controls');
-        const switchBtn = document.getElementById('switch-playlist-btn');
-        const fullscreenBtn = document.getElementById('fullscreen-btn');
-        const fsIconEnter = document.getElementById('fs-icon-enter');
-        const fsIconExit = document.getElementById('fs-icon-exit');
+        const fullscreenBtn  = document.getElementById('fullscreen-btn');
+        const fsIconEnter    = document.getElementById('fs-icon-enter');
+        const fsIconExit     = document.getElementById('fs-icon-exit');
 
-        if (switchBtn) {
-            switchBtn.addEventListener('click', () => resetSelection(true));
-        }
+        // ── Fullscreen helpers ─────────────────────────────────────────────
+        let _autoFsEnabled   = false;
+        let _autoFsListening = false; // guard against double listeners
+        let _autoFsRetryInt  = null;  // periodic retry for kiosk/TV (no user gesture)
 
-        // ── Fullscreen toggle ──────────────────────────────────────────────
         function updateFsIcon() {
             const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
-            if (fsIconEnter) fsIconEnter.style.display = isFs ? 'none'  : '';
-            if (fsIconExit)  fsIconExit.style.display  = isFs ? ''     : 'none';
+            if (fsIconEnter) fsIconEnter.style.display = isFs ? 'none' : '';
+            if (fsIconExit)  fsIconExit.style.display  = isFs ? ''    : 'none';
             if (fullscreenBtn) fullscreenBtn.title = isFs ? 'Exit fullscreen' : 'Enter fullscreen';
         }
-        document.addEventListener('fullscreenchange', updateFsIcon);
-        document.addEventListener('webkitfullscreenchange', updateFsIcon);
+
+        function _requestFs() {
+            const el = document.documentElement;
+            return el.requestFullscreen ? el.requestFullscreen()
+                 : el.webkitRequestFullscreen ? Promise.resolve(el.webkitRequestFullscreen())
+                 : Promise.reject('no FS API');
+        }
+
+        // Keep prompt hidden — used by the manual fullscreen button path only,
+        // but auto-fullscreen uses silent first-interaction capture instead.
+        function _handleFsPromptClick() {
+            const p = document.getElementById('fs-prompt');
+            if (p) p.style.display = 'none';
+            _requestFs().then(updateFsIcon).catch(() => {});
+        }
+
+        function _attemptAutoFullscreen() {
+            if (!_autoFsEnabled) return;
+            const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+            if (isFs) {
+                // Already fullscreen — cancel any pending retry loop
+                if (_autoFsRetryInt) { clearInterval(_autoFsRetryInt); _autoFsRetryInt = null; }
+                return;
+            }
+
+            _requestFs().then(() => {
+                if (_autoFsRetryInt) { clearInterval(_autoFsRetryInt); _autoFsRetryInt = null; }
+                updateFsIcon();
+            }).catch(() => {
+                // Browser blocked immediate re-entry (no user gesture context).
+                // Fallback 1: one-shot capture listener — re-enters on first tap/click/key.
+                if (!_autoFsListening) {
+                    _autoFsListening = true;
+                    const _onInteraction = () => {
+                        _autoFsListening = false;
+                        _requestFs().then(() => {
+                            if (_autoFsRetryInt) { clearInterval(_autoFsRetryInt); _autoFsRetryInt = null; }
+                            updateFsIcon();
+                        }).catch(() => {});
+                    };
+                    const opts = { once: true, capture: true, passive: true };
+                    document.addEventListener('click',    _onInteraction, opts);
+                    document.addEventListener('touchend', _onInteraction, opts);
+                    document.addEventListener('keydown',  _onInteraction, opts);
+                }
+                // Fallback 2: periodic retry every 5 s — handles headless TV displays where
+                // no user interaction will ever come, but the browser may allow re-entry after
+                // a short delay (common on Chromium when fullscreen exited due to iframe change).
+                if (!_autoFsRetryInt) {
+                    _autoFsRetryInt = setInterval(() => {
+                        if (!_autoFsEnabled) { clearInterval(_autoFsRetryInt); _autoFsRetryInt = null; return; }
+                        const f = !!(document.fullscreenElement || document.webkitFullscreenElement);
+                        if (f)  { clearInterval(_autoFsRetryInt); _autoFsRetryInt = null; updateFsIcon(); return; }
+                        _requestFs().then(() => {
+                            clearInterval(_autoFsRetryInt); _autoFsRetryInt = null; updateFsIcon();
+                        }).catch(() => {});
+                    }, 5000);
+                }
+            });
+        }
+
+        document.addEventListener('fullscreenchange', () => {
+            updateFsIcon();
+            // Exited fullscreen while auto-FS is on → silently re-enter on next interaction
+            if (_autoFsEnabled && !document.fullscreenElement && !document.webkitFullscreenElement) {
+                _attemptAutoFullscreen();
+            }
+        });
+        document.addEventListener('webkitfullscreenchange', () => {
+            updateFsIcon();
+            if (_autoFsEnabled && !document.fullscreenElement && !document.webkitFullscreenElement) {
+                _attemptAutoFullscreen();
+            }
+        });
 
         if (fullscreenBtn) {
             fullscreenBtn.addEventListener('click', () => {
@@ -599,13 +797,15 @@
         }
         
         function stopCurrentMedia() {
+            _mediaGeneration++;   // invalidate all in-flight callbacks (onended, onerror, imageTimeout)
             try { videoPlayer.pause(); } catch (e) {}
             videoPlayer.classList.add('hidden');
             try { imagePlayer.classList.add('hidden'); } catch (e) {}
             if (imageTimeout) { clearTimeout(imageTimeout); imageTimeout = null; }
             try {
                 youtubeContainer.classList.add('hidden');
-                youtubeIframe.src = '';
+                // Do NOT set youtubeIframe.src = '' here — changing iframe src while in fullscreen
+                // causes Chromium to exit fullscreen. stopVideo() is sufficient to halt playback.
                 if (youtubePlayer && youtubePlayer.stopVideo) youtubePlayer.stopVideo();
             } catch (e) {}
             if (youtubeEndTimer) { clearTimeout(youtubeEndTimer); youtubeEndTimer = null; }
@@ -729,21 +929,46 @@
         
         function playNext() {
             if (playlist.length === 0 || isPlaying) {
-                return; // FIXED: Prevent duplicate playback
+                return;
             }
-            
+
             isPlaying = true;
             loading.classList.add('hidden');
-            
+
+            // Capture generation so callbacks from THIS play session are silently discarded
+            // if stopCurrentMedia() is called before they fire (race-condition guard).
+            const gen = _mediaGeneration;
+
             const item = playlist[currentIndex];
             console.log('Playing:', item.name);
-            
+
+            // Re-attach media event handlers with generation guard — prevents stale onended/onerror
+            // from a previous play session double-advancing the playlist.
+            videoPlayer.onended = function() {
+                if (_mediaGeneration !== gen) return;
+                isPlaying = false;
+                nextItem();
+            };
+            videoPlayer.onerror = function() {
+                if (_mediaGeneration !== gen) return;
+                console.error('Video error');
+                isPlaying = false;
+                nextItem();
+            };
+            imagePlayer.onerror = function() {
+                if (_mediaGeneration !== gen) return;
+                console.error('Image error');
+                isPlaying = false;
+                nextItem();
+            };
+
             if (item.type === 'video') {
                 imagePlayer.classList.add('hidden');
                 videoPlayer.classList.remove('hidden');
                 videoPlayer.src = item.url;
-                videoPlayer.muted = false; // keep unmuted
+                videoPlayer.muted = false;
                 videoPlayer.play().catch(err => {
+                    if (_mediaGeneration !== gen) return;
                     console.error('Play error:', err);
                     isPlaying = false;
                     nextItem();
@@ -753,10 +978,10 @@
                 imagePlayer.classList.remove('hidden');
                 imagePlayer.src = item.url;
 
-                // Track timeout so stopCurrentMedia() can cancel it
                 if (imageTimeout) clearTimeout(imageTimeout);
                 imageTimeout = setTimeout(() => {
                     imageTimeout = null;
+                    if (_mediaGeneration !== gen) return;
                     isPlaying = false;
                     nextItem();
                 }, (item.duration || 10) * 1000);
@@ -765,59 +990,49 @@
                 imagePlayer.classList.add('hidden');
                 youtubeContainer.classList.remove('hidden');
 
-                // Convert URL to embeddable format
                 const embedUrl = convertToEmbed(item.url);
                 const videoId = embedUrl.split('/embed/')[1];
-                if (youtubeEndTimer) {
-                    clearTimeout(youtubeEndTimer);
-                    youtubeEndTimer = null;
-                }
+                if (youtubeEndTimer) { clearTimeout(youtubeEndTimer); youtubeEndTimer = null; }
                 pendingYoutubeDurationSec = null;
                 youtubeStartTs = Date.now();
                 youtubeMaxMs = null;
-
                 pendingYoutubeId = videoId;
 
                 if (youtubePlayerReady && youtubePlayer) {
-                    youtubePlayer.mute(); // ensure autoplay allowed
+                    youtubePlayer.mute();
                     youtubePlayer.loadVideoById(videoId);
                     youtubePlayer.playVideo();
                     youtubePlayer.setVolume(100);
-                    // Try to schedule a duration-based fallback after player reports duration
                     scheduleYoutubeTimeout();
                 } else {
-                    // Fallback: direct iframe load (muted to satisfy autoplay), will stay muted until API kicks in
                     youtubeIframe.src = embedUrl + (embedUrl.includes('?') ? '&' : '?') + 'autoplay=1&mute=1&rel=0&enablejsapi=1&origin=' + encodeURIComponent(window.location.origin);
                 }
 
-                // Fallback timeout: move on after 10 minutes if API end event fails
+                // Fallback timeout: move on after 10 minutes if API end event never fires
                 youtubeEndTimer = setTimeout(() => {
+                    if (_mediaGeneration !== gen) return;
                     console.warn('YouTube fallback timeout reached; advancing');
                     youtubeContainer.classList.add('hidden');
-                    youtubeIframe.src = '';
+                    // Do NOT clear youtubeIframe.src — Chromium exits fullscreen when iframe src changes.
                     if (youtubePlayer && youtubePlayer.stopVideo) youtubePlayer.stopVideo();
                     isPlaying = false;
                     nextItem();
                 }, 10 * 60 * 1000);
             }
         }
-        
+
         function convertToEmbed(url) {
-            // Handle youtube.com/watch?v=VIDEO_ID format
             if (url.includes('youtube.com/watch?v=')) {
                 const videoId = url.split('watch?v=')[1].split('&')[0];
                 return `https://www.youtube.com/embed/${videoId}`;
             }
-            // Handle youtu.be/VIDEO_ID format
             if (url.includes('youtu.be/')) {
                 const videoId = url.split('youtu.be/')[1].split('?')[0];
                 return `https://www.youtube.com/embed/${videoId}`;
             }
-            // Handle already embedded URLs
             if (url.includes('youtube.com/embed/')) {
                 return url;
             }
-            // Fallback: return as-is
             return url;
         }
 
@@ -832,39 +1047,11 @@
         function scheduleYoutubeTimeout() {
             if (!youtubePlayer) return;
             let dur = 0;
-            try {
-                dur = youtubePlayer.getDuration();
-            } catch (e) {
-                dur = 0;
-            }
-            if (!dur || !isFinite(dur) || dur <= 0) {
-                // unknown duration, keep existing fallback
-                return;
-            }
+            try { dur = youtubePlayer.getDuration(); } catch (e) { dur = 0; }
+            if (!dur || !isFinite(dur) || dur <= 0) return;
             pendingYoutubeDurationSec = dur;
-            const bufferMs = 7000; // 7s buffer after expected end
-            youtubeMaxMs = (dur * 1000) + bufferMs;
+            youtubeMaxMs = (dur * 1000) + 7000;
         }
-        
-        // Video ended - play next
-        videoPlayer.onended = function() {
-            isPlaying = false;
-            nextItem();
-        };
-        
-        // Video error - skip to next
-        videoPlayer.onerror = function() {
-            console.error('Video error');
-            isPlaying = false;
-            nextItem();
-        };
-        
-        // Image error - skip to next
-        imagePlayer.onerror = function() {
-            console.error('Image error');
-            isPlaying = false;
-            nextItem();
-        };
         
         // YouTube IFrame API callback when script loads
         function onYouTubeIframeAPIReady() {
@@ -929,7 +1116,7 @@
         
         function youtubeAdvance() {
             youtubeContainer.classList.add('hidden');
-            youtubeIframe.src = '';
+            // Do NOT clear youtubeIframe.src — Chromium exits fullscreen when iframe src changes.
             try { if (youtubePlayer && youtubePlayer.stopVideo) youtubePlayer.stopVideo(); } catch (e) {}
             if (youtubeEndTimer) { clearTimeout(youtubeEndTimer); youtubeEndTimer = null; }
             youtubeStartTs = null;
@@ -1153,6 +1340,9 @@
             if (!standby) return;
             waitScreen.classList.add('hidden');
             standby.classList.remove('hidden');
+            // Start ticker (and auto-fullscreen) on the standby screen too.
+            // initTicker() is idempotent — the guard inside prevents duplicate polling.
+            initTicker().catch(() => {});
             standby.style.display = 'flex';
 
             document.getElementById('sch-standby-name').textContent = scheduleName || 'Schedule';
@@ -1230,6 +1420,7 @@
             }
             startPlayback();
             _startHeartbeat();
+            initTicker().catch(() => {});
         }
 
         let _deviceAssignedPid = null;
@@ -1280,6 +1471,250 @@
         initDevice().catch(() => loadPlaylists());
 
         console.log('Ready - Device registration mode');
+
+        // ── NEWS TICKER ───────────────────────────────────────────
+        let _tickerCfg      = null;
+        let _tickerPos      = 0;
+        let _tickerPxPerSec = 100;
+        let _tickerWidth    = 0;
+        let _tickerLast     = null;
+        let _tickerRaf      = null;
+        let _tickerMsgHash  = '';
+
+        const _TICKER_PX = { slow: 55, normal: 95, fast: 160 };
+        const _TICKER_FONT = { 'ticker-sm': '11px', 'ticker-md': '13px', 'ticker-lg': '16px' };
+
+        let _tickerRefreshInterval  = null;
+        let _tickerSettingsPollInt  = null;
+        let _tickerSettingsHash     = '';   // change-detection for live settings reload
+
+        // ── Ticker layout helpers ─────────────────────────────────────────
+        const _TICKER_H_PX = { 'ticker-sm': 34, 'ticker-md': 46, 'ticker-lg': 62 };
+
+        function _applyTickerLayout(sizeClass, position) {
+            const h = _TICKER_H_PX[sizeClass] || 46;
+            const isTop = position === 'top';
+            document.documentElement.style.setProperty('--ticker-h',   h + 'px');
+            document.documentElement.style.setProperty('--ticker-top', isTop ? h + 'px' : '0px');
+        }
+
+        function _resetTickerLayout() {
+            document.documentElement.style.setProperty('--ticker-h',   '0px');
+            document.documentElement.style.setProperty('--ticker-top', '0px');
+        }
+        // ─────────────────────────────────────────────────────────────────
+
+        // Apply a settings object live — called both on init and on every change detection
+        async function _applyTickerSettings(cfg) {
+            // ── Auto-fullscreen (works independently of ticker) ──────────
+            const newAutoFs = !!cfg.auto_fullscreen;
+            if (newAutoFs !== _autoFsEnabled) {
+                _autoFsEnabled = newAutoFs;
+                if (newAutoFs) {
+                    _attemptAutoFullscreen();
+                } else {
+                    // Auto-FS turned off — cancel any pending retry loop
+                    if (_autoFsRetryInt) { clearInterval(_autoFsRetryInt); _autoFsRetryInt = null; }
+                }
+            }
+
+            // ── Ticker disabled ──────────────────────────────────────────
+            if (!cfg.ticker_enabled) {
+                const overlay = document.getElementById('ticker-overlay');
+                if (overlay) overlay.style.display = 'none';
+                _stopTickerScroll();
+                _resetTickerLayout();
+                _tickerCfg    = null;
+                _tickerMsgHash = '';
+                if (_tickerRefreshInterval) {
+                    clearInterval(_tickerRefreshInterval);
+                    _tickerRefreshInterval = null;
+                }
+                console.log('[Ticker] Disabled');
+                return;
+            }
+
+            // ── Ticker enabled ───────────────────────────────────────────
+            _tickerCfg = cfg;
+            const overlay = document.getElementById('ticker-overlay');
+            const inner   = document.getElementById('ticker-inner');
+            if (!overlay || !inner) return;
+
+            const sizeClass = { small: 'ticker-sm', medium: 'ticker-md', large: 'ticker-lg' }[cfg.ticker_height] || 'ticker-md';
+            overlay.className = '';
+            if (cfg.ticker_position === 'top') overlay.classList.add('ticker-top');
+            overlay.classList.add(sizeClass);
+            overlay.style.display = 'flex';
+
+            _applyTickerLayout(sizeClass, cfg.ticker_position || 'bottom');
+
+            inner.style.background = cfg.ticker_bg_color || 'rgba(15,23,42,0.9)';
+            const track = document.getElementById('ticker-track');
+            if (track) {
+                track.style.color    = cfg.ticker_text_color || '#ffffff';
+                track.style.fontSize = _TICKER_FONT[sizeClass] || '13px';
+            }
+
+            const liveBadge = document.getElementById('ticker-live-badge');
+            if (liveBadge) {
+                liveBadge.style.display = cfg.ticker_show_live !== false ? '' : 'none';
+                liveBadge.style.color   = cfg.ticker_text_color || '#ef4444';
+                const dot = liveBadge.querySelector('.ticker-live-dot');
+                if (dot) dot.style.background = '#ef4444';
+            }
+
+            const newSpeed = _TICKER_PX[cfg.ticker_speed] || 95;
+            if (newSpeed !== _tickerPxPerSec) {
+                _tickerPxPerSec = newSpeed; // takes effect on next rAF frame automatically
+            }
+
+            // Force re-render so size/colour changes are reflected in the track
+            _tickerMsgHash = '';
+            await _fetchAndRenderTicker();
+
+            // Start message-refresh interval if not already running
+            if (!_tickerRefreshInterval) {
+                _tickerRefreshInterval = setInterval(_fetchAndRenderTicker, 60000);
+            }
+
+            console.log('[Ticker] Settings applied — enabled, size:', sizeClass, 'speed:', _tickerPxPerSec);
+        }
+
+        // Fetch settings, diff against last known hash, call _applyTickerSettings on change
+        async function _pollTickerSettings() {
+            if (!currentDeviceId) return;
+            try {
+                const res = await fetch(`/api/clients/${encodeURIComponent(currentDeviceId)}/ticker`);
+                if (!res.ok) return;
+                const data = await res.json();
+                if (!data.ok || !data.ticker) return;
+
+                const hash = JSON.stringify(data.ticker);
+                if (hash === _tickerSettingsHash) return; // nothing changed
+                _tickerSettingsHash = hash;
+
+                console.log('[Ticker] Settings changed — applying live update');
+                await _applyTickerSettings(data.ticker);
+            } catch(e) {
+                console.warn('[Ticker] Settings poll failed:', e);
+            }
+        }
+
+        // Entry point — called once from _startDevicePlayback; starts both polling loops
+        async function initTicker() {
+            if (!currentDeviceId) { console.log('[Ticker] Skipped — no deviceId'); return; }
+            // Prevent duplicate poll intervals on repeated heartbeat calls
+            if (_tickerSettingsPollInt) return;
+
+            // Apply immediately, then poll every 30 s for live config changes
+            await _pollTickerSettings();
+            _tickerSettingsPollInt = setInterval(_pollTickerSettings, 30000);
+        }
+
+        async function _fetchAndRenderTicker() {
+            try {
+                const res = await fetch('/api/news/active');
+                if (!res.ok) { console.warn('[Ticker] /api/news/active returned', res.status); return; }
+                const data = await res.json();
+                const msgs = (data.messages || []).filter(m => m.message);
+                console.log('[Ticker] Active messages:', msgs.length);
+
+                if (!msgs.length) {
+                    // No active messages — keep the bar visible (space stays reserved)
+                    // but stop the scroll animation and clear old content
+                    _stopTickerScroll();
+                    const track = document.getElementById('ticker-track');
+                    if (track) track.innerHTML = '';
+                    _tickerMsgHash = '';
+                    return;
+                }
+
+                // Re-show overlay in case it was previously hidden
+                const overlay = document.getElementById('ticker-overlay');
+                if (overlay && _tickerCfg) overlay.style.display = 'flex';
+
+                // Change detection — only re-render if content changed
+                const hash = msgs.map(m => m.id + ':' + m.message).join('|');
+                if (hash === _tickerMsgHash) return;
+                _tickerMsgHash = hash;
+                console.log('[Ticker] Rendering', msgs.length, 'message(s)');
+                _renderTickerContent(msgs);
+            } catch(e) {
+                console.warn('[Ticker] Fetch failed:', e);
+            }
+        }
+
+        function _renderTickerContent(msgs) {
+            const track   = document.getElementById('ticker-track');
+            const wrapper = document.getElementById('ticker-track-wrapper');
+            if (!track || !wrapper) return;
+
+            // Build one unit of content (all messages with separators)
+            const msgHtml = msgs.map((m, i) => {
+                const sep = i > 0 ? '<span class="ticker-sep">•</span>' : '';
+                return `${sep}<span class="ticker-msg"><span class="ticker-msg-title">${_escTicker(m.title)}</span><span class="ticker-msg-text">${_escTicker(m.message)}</span></span>`;
+            }).join('');
+
+            // Render a single copy first so we can measure its natural width
+            track.innerHTML = `<span id="_tkMeasure">${msgHtml}</span>`;
+
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    const measure = document.getElementById('_tkMeasure');
+                    const singleW = measure ? measure.offsetWidth : 0;
+                    if (singleW < 1) return;
+
+                    // How many copies fill the visible wrapper + one extra for seamless reset?
+                    const wrapperW  = wrapper.offsetWidth || window.innerWidth;
+                    const minCopies = Math.ceil((wrapperW + singleW) / singleW) + 1;
+                    const copies    = Math.max(minCopies, 3); // at least 3 for safety
+
+                    // Build track: first copy gets the id for reset-point measurement
+                    let html = `<span id="_tkA">${msgHtml}</span>`;
+                    for (let i = 1; i < copies; i++) {
+                        html += `<span aria-hidden="true">${msgHtml}</span>`;
+                    }
+                    track.innerHTML = html;
+
+                    // Wait one more frame so the browser has laid out all copies
+                    requestAnimationFrame(() => {
+                        const copyA = document.getElementById('_tkA');
+                        _tickerWidth = copyA ? copyA.offsetWidth : singleW;
+                        if (_tickerWidth < 1) return;
+                        _stopTickerScroll();
+                        _tickerPos  = 0;
+                        _tickerLast = null;
+                        _tickerRaf  = requestAnimationFrame(_tickerStep);
+                        console.log('[Ticker] Track width:', _tickerWidth, 'px | copies:', copies, '| wrapper:', wrapperW, 'px');
+                    });
+                });
+            });
+        }
+
+        function _tickerStep(ts) {
+            if (!_tickerLast) _tickerLast = ts;
+            const dt = (ts - _tickerLast) / 1000;
+            _tickerLast = ts;
+            _tickerPos += dt * _tickerPxPerSec;
+            if (_tickerPos >= _tickerWidth) _tickerPos -= _tickerWidth;
+            const track = document.getElementById('ticker-track');
+            if (track) track.style.transform = `translateX(${-_tickerPos}px)`;
+            _tickerRaf = requestAnimationFrame(_tickerStep);
+        }
+
+        function _stopTickerScroll() {
+            if (_tickerRaf) { cancelAnimationFrame(_tickerRaf); _tickerRaf = null; }
+        }
+
+        function _escTicker(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+        // ── END NEWS TICKER ───────────────────────────────────────
     </script>
 </body>
 </html>

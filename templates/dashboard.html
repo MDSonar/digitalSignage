@@ -498,6 +498,43 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
 .media-empty-state{text-align:center;padding:48px 18px;color:var(--text-3);grid-column:1/-1}
 .media-empty-state svg{display:block;margin:0 auto 14px;opacity:.2}
 .media-empty-state-title{font-size:13.5px;font-weight:600;color:var(--text-2);margin-bottom:5px}
+
+/* ── News / Ticker ─────────────────────────────────────── */
+.news-list{display:flex;flex-direction:column;gap:8px}
+.news-row{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-radius:10px;background:var(--surface-2);border:1px solid var(--border);transition:border-color .15s}
+.news-row:hover{border-color:var(--primary)}
+.news-row-icon{width:36px;height:36px;border-radius:9px;background:rgba(91,80,240,.1);color:var(--primary);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+.news-row-body{flex:1;min-width:0}
+.news-row-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px}
+.news-row-text{font-size:12px;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:55ch}
+.news-row-meta{font-size:11px;color:var(--text-3);margin-top:5px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.news-priority-badge{display:inline-block;font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;background:rgba(91,80,240,.1);color:var(--primary)}
+.news-row-actions{display:flex;gap:6px;align-items:center;flex-shrink:0}
+.news-toggle-btn{position:relative;width:34px;height:19px;border:none;border-radius:10px;background:var(--border);cursor:pointer;transition:background .2s;flex-shrink:0}
+.news-toggle-btn.on{background:var(--primary)}
+.news-toggle-btn::after{content:'';position:absolute;left:3px;top:3px;width:13px;height:13px;border-radius:50%;background:#fff;transition:transform .2s}
+.news-toggle-btn.on::after{transform:translateX(15px)}
+/* Ticker modal */
+.ticker-modal-overlay{position:fixed;inset:0;background:rgba(10,11,22,.55);display:flex;align-items:center;justify-content:center;z-index:300;backdrop-filter:blur(3px)}
+.ticker-modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow-lg);width:100%;max-width:490px;overflow:hidden}
+.ticker-modal-hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 17px;border-bottom:1px solid var(--border);font-weight:700;font-size:14px}
+.ticker-modal-body{padding:16px 17px;display:flex;flex-direction:column;gap:14px}
+.ticker-modal-foot{padding:11px 17px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end}
+.ticker-field-label{font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:5px}
+.ticker-radio-group{display:flex;gap:6px;flex-wrap:wrap}
+.ticker-radio-btn{padding:5px 12px;border-radius:7px;border:1px solid var(--border);background:var(--surface-2);color:var(--text-2);font-size:12px;cursor:pointer;transition:all .15s}
+.ticker-radio-btn.selected,.ticker-radio-btn:hover{border-color:var(--primary);color:var(--primary);background:rgba(91,80,240,.08)}
+.ticker-enable-row{display:flex;align-items:center;gap:10px}
+.ticker-en-toggle{position:relative;width:40px;height:22px;border:none;border-radius:11px;background:var(--border);cursor:pointer;transition:background .2s}
+.ticker-en-toggle.on{background:var(--primary)}
+.ticker-en-toggle::after{content:'';position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .2s}
+.ticker-en-toggle.on::after{transform:translateX(18px)}
+.dc-ticker-badge{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:5px;background:rgba(91,80,240,.1);color:var(--primary);border:1px solid rgba(91,80,240,.2);cursor:pointer;transition:opacity .15s}
+.dc-ticker-badge:hover{opacity:.75}
+.dc-ticker-badge.off{background:var(--surface-2);color:var(--text-3);border-color:var(--border)}
+.dc-fs-badge{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:5px;background:rgba(16,185,129,.1);color:#10b981;border:1px solid rgba(16,185,129,.2);cursor:pointer;transition:opacity .15s}
+.dc-fs-badge:hover{opacity:.75}
+.dc-fs-badge.off{background:var(--surface-2);color:var(--text-3);border-color:var(--border)}
 </style>
 </head>
 <body>
@@ -701,6 +738,7 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
             <button class="media-chip filter-tab" onclick="filterMedia('video',this)">Videos</button>
             <button class="media-chip filter-tab" onclick="filterMedia('slide',this)">Slides</button>
             <button class="media-chip filter-tab" onclick="filterMedia('yt',this)">YouTube</button>
+            <button class="media-chip filter-tab" onclick="filterMedia('news',this)">📢 News</button>
           </div>
           <button class="btn btn-primary" onclick="document.getElementById('unifiedFileInput').click()">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
@@ -781,6 +819,28 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
           <div>Click <strong>Upload Media</strong> to add videos or presentations.</div>
         </div>
         {% endif %}
+      </div>
+
+      <!-- News / Ticker messages -->
+      <div id="newsSection" style="display:none;margin-bottom:14px">
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div>
+              <div style="font-size:14px;font-weight:700">📢 News Messages</div>
+              <div style="font-size:12px;color:var(--text-3);margin-top:2px">Scrolling ticker messages displayed on your screens</div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="openNewsModal()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Add Message
+            </button>
+          </div>
+          <div id="newsListContainer" class="news-list">
+            <div style="text-align:center;padding:28px 18px;color:var(--text-3);font-size:12.5px">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="display:block;margin:0 auto 10px;opacity:.2"><path d="M4 6h16M4 10h16M4 14h8M4 18h6"/></svg>
+              No messages yet — click <strong>Add Message</strong> to create one.
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- YouTube Links (unchanged) -->
@@ -3456,6 +3516,14 @@ function renderClientCard(c, playlists, schedules) {
     </div>
     <div class="dc-actions">
       ${rpiBtns}
+      <button class="dc-ticker-badge${c.ticker_settings && c.ticker_settings.ticker_enabled ? '' : ' off'}" onclick="openTickerModal('${c.id}')" title="Configure news ticker">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h8"/></svg>
+        ${c.ticker_settings && c.ticker_settings.ticker_enabled ? 'Ticker On' : 'Ticker'}
+      </button>
+      <button class="dc-fs-badge${c.ticker_settings && c.ticker_settings.auto_fullscreen ? '' : ' off'}" onclick="openTickerModal('${c.id}')" title="Auto fullscreen settings">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+        ${c.ticker_settings && c.ticker_settings.auto_fullscreen ? 'FS On' : 'Fullscreen'}
+      </button>
       <button class="dc-remove-btn" onclick="removeClient('${c.id}')">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
         Remove
@@ -3574,16 +3642,25 @@ document.getElementById('unifiedFileInput')?.addEventListener('change', function
 
 /* Filter media list by type */
 function filterMedia(type, btn) {
-  document.querySelectorAll('#mediaFileList .file-item').forEach(el => {
-    if (type === 'all' || type === 'yt') { el.style.display = type === 'yt' ? 'none' : ''; }
-    else { el.style.display = el.dataset.mediaType === type ? '' : 'none'; }
-  });
-  // Show/hide YouTube card
-  const ytCard = document.getElementById('youtubeList') && document.getElementById('youtubeList').closest('.card');
-  if (ytCard) ytCard.style.display = (type === 'all' || type === 'yt') ? '' : 'none';
-  // Show/hide media grid container
   const mediaGrid = document.getElementById('mediaFileList');
-  if (mediaGrid) mediaGrid.style.display = (type === 'yt') ? 'none' : '';
+  const ytEl = document.getElementById('youtubeList');
+  const ytCard = ytEl && ytEl.closest('.card');
+  const newsSection = document.getElementById('newsSection');
+
+  if (type === 'news') {
+    if (mediaGrid) mediaGrid.style.display = 'none';
+    if (ytCard)    ytCard.style.display    = 'none';
+    if (newsSection) { newsSection.style.display = ''; loadNewsMessages(); }
+  } else {
+    if (newsSection) newsSection.style.display = 'none';
+    if (mediaGrid) mediaGrid.style.display = (type === 'yt') ? 'none' : '';
+    if (ytCard)    ytCard.style.display    = (type === 'all' || type === 'yt') ? '' : 'none';
+    document.querySelectorAll('#mediaFileList .file-item').forEach(el => {
+      if (type === 'all') { el.style.display = ''; }
+      else { el.style.display = el.dataset.mediaType === type ? '' : 'none'; }
+    });
+  }
+
   document.querySelectorAll('.filter-tab').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
 }
@@ -4169,6 +4246,415 @@ async function addYoutubeLink() {
     }
   };
 })();
+
+/* ════════════════════════════════════════════════════════════
+   NEWS MESSAGES — CRUD
+   ════════════════════════════════════════════════════════════ */
+
+async function loadNewsMessages() {
+  try {
+    const res = await fetch('/api/news');
+    if (!res.ok) throw new Error('fetch failed');
+    const data = await res.json();
+    renderNewsList(data.messages || []);
+  } catch(e) {
+    document.getElementById('newsListContainer').innerHTML =
+      '<div style="color:var(--danger);font-size:12px;padding:10px">Failed to load messages</div>';
+  }
+}
+
+function renderNewsList(messages) {
+  const container = document.getElementById('newsListContainer');
+  if (!container) return;
+
+  if (!messages.length) {
+    container.innerHTML = `
+      <div style="text-align:center;padding:28px 18px;color:var(--text-3);font-size:12.5px">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="display:block;margin:0 auto 10px;opacity:.2"><path d="M4 6h16M4 10h16M4 14h8M4 18h6"/></svg>
+        No messages yet — click <strong>Add Message</strong> to create one.
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = messages.map(m => {
+    const on = m.enabled !== false;
+    const priority = m.priority || 0;
+    const dateRange = [m.start_date, m.end_date].filter(Boolean).join(' → ') || '';
+    return `<div class="news-row" id="newsrow-${escHtml(m.id)}">
+      <div class="news-row-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 10h16M4 14h8M4 18h6"/></svg>
+      </div>
+      <div class="news-row-body">
+        <div class="news-row-title">${escHtml(m.title)}</div>
+        <div class="news-row-text">${escHtml(m.message)}</div>
+        <div class="news-row-meta">
+          ${priority > 0 ? `<span class="news-priority-badge">Priority ${priority}</span>` : ''}
+          ${dateRange ? `<span>📅 ${escHtml(dateRange)}</span>` : ''}
+          <span style="color:${on ? 'var(--success,#16a974)' : 'var(--text-3)'}">${on ? '✓ Active' : '○ Disabled'}</span>
+        </div>
+      </div>
+      <div class="news-row-actions">
+        <button class="news-toggle-btn ${on ? 'on' : ''}" onclick="toggleNewsEnabled('${escHtml(m.id)}',${!on})" title="${on ? 'Disable' : 'Enable'}"></button>
+        <button class="btn btn-sm btn-secondary" onclick="openNewsModal('${escHtml(m.id)}')" title="Edit" style="padding:4px 9px">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>
+        </button>
+        <button class="btn btn-sm btn-danger" onclick="deleteNewsMessage('${escHtml(m.id)}')" title="Delete" style="padding:4px 9px">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+let _newsMsgCache = [];
+
+function openNewsModal(mid) {
+  const modal = document.getElementById('newsMessageModal');
+  if (!modal) return;
+  document.getElementById('newsEditId').value = mid || '';
+  document.getElementById('newsModalTitle').textContent = mid ? 'Edit Message' : 'Add Message';
+
+  if (mid) {
+    // Load existing data from cache
+    const msg = _newsMsgCache.find(m => m.id === mid);
+    if (msg) {
+      document.getElementById('newsMsgTitle').value     = msg.title    || '';
+      document.getElementById('newsMsgBody').value      = msg.message  || '';
+      document.getElementById('newsMsgPriority').value  = msg.priority || 0;
+      document.getElementById('newsMsgStartDate').value = msg.start_date || '';
+      document.getElementById('newsMsgEndDate').value   = msg.end_date   || '';
+      document.getElementById('newsMsgEnabled').checked = msg.enabled !== false;
+    }
+  } else {
+    document.getElementById('newsMsgTitle').value     = '';
+    document.getElementById('newsMsgBody').value      = '';
+    document.getElementById('newsMsgPriority').value  = '0';
+    document.getElementById('newsMsgStartDate').value = '';
+    document.getElementById('newsMsgEndDate').value   = '';
+    document.getElementById('newsMsgEnabled').checked = true;
+  }
+  modal.style.display = 'flex';
+  setTimeout(() => document.getElementById('newsMsgTitle').focus(), 60);
+}
+
+function closeNewsModal() {
+  const modal = document.getElementById('newsMessageModal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function saveNewsMessage() {
+  const mid   = document.getElementById('newsEditId').value.trim();
+  const title = document.getElementById('newsMsgTitle').value.trim();
+  const message = document.getElementById('newsMsgBody').value.trim();
+  if (!title || !message) { alert('Title and message are required.'); return; }
+
+  const payload = {
+    title,
+    message,
+    priority:   parseInt(document.getElementById('newsMsgPriority').value) || 0,
+    enabled:    document.getElementById('newsMsgEnabled').checked,
+    start_date: document.getElementById('newsMsgStartDate').value || null,
+    end_date:   document.getElementById('newsMsgEndDate').value   || null,
+  };
+
+  try {
+    const url    = mid ? `/api/news/${encodeURIComponent(mid)}` : '/api/news';
+    const method = mid ? 'PUT' : 'POST';
+    const res    = await fetch(url, {
+      method,
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'save failed');
+    closeNewsModal();
+    loadNewsMessages();
+  } catch(e) {
+    alert('Failed to save: ' + e.message);
+  }
+}
+
+async function deleteNewsMessage(mid) {
+  if (!confirm('Delete this message?')) return;
+  try {
+    const res = await fetch(`/api/news/${encodeURIComponent(mid)}`, {method: 'DELETE'});
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'delete failed');
+    loadNewsMessages();
+  } catch(e) {
+    alert('Failed to delete: ' + e.message);
+  }
+}
+
+async function toggleNewsEnabled(mid, enabled) {
+  try {
+    const res = await fetch(`/api/news/${encodeURIComponent(mid)}`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({enabled}),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'update failed');
+    loadNewsMessages();
+  } catch(e) {
+    alert('Failed to update: ' + e.message);
+  }
+}
+
+// Patch loadNewsMessages to keep a local cache for the edit modal
+(function() {
+  const _orig = window.loadNewsMessages;
+  window.loadNewsMessages = async function() {
+    try {
+      const res = await fetch('/api/news');
+      if (!res.ok) throw new Error('fetch failed');
+      const data = await res.json();
+      _newsMsgCache = data.messages || [];
+      renderNewsList(_newsMsgCache);
+    } catch(e) {
+      const c = document.getElementById('newsListContainer');
+      if (c) c.innerHTML = '<div style="color:var(--danger);font-size:12px;padding:10px">Failed to load messages</div>';
+    }
+  };
+})();
+
+/* ════════════════════════════════════════════════════════════
+   TICKER SETTINGS — per-display modal
+   ════════════════════════════════════════════════════════════ */
+
+async function openTickerModal(deviceId) {
+  const modal = document.getElementById('tickerModal');
+  if (!modal) return;
+  document.getElementById('tickerDeviceId').value = deviceId;
+
+  // Fetch current settings
+  let cfg = {ticker_enabled: false, ticker_height: 'medium', ticker_speed: 'normal',
+              ticker_position: 'bottom', ticker_bg_color: '#1e293b',
+              ticker_text_color: '#ffffff', ticker_show_live: true};
+  try {
+    const res = await fetch(`/api/clients/${encodeURIComponent(deviceId)}/ticker`);
+    const data = await res.json();
+    if (data.ok && data.ticker) cfg = {...cfg, ...data.ticker};
+  } catch(_) {}
+
+  // Apply values to form
+  const toggle = document.getElementById('tickerEnableToggle');
+  const status = document.getElementById('tickerStatusText');
+  toggle.classList.toggle('on', !!cfg.ticker_enabled);
+  status.textContent = cfg.ticker_enabled ? 'Enabled' : 'Disabled';
+
+  _tickerSetGroup('tickerHeightGroup',   cfg.ticker_height   || 'medium');
+  _tickerSetGroup('tickerSpeedGroup',    cfg.ticker_speed    || 'normal');
+  _tickerSetGroup('tickerPositionGroup', cfg.ticker_position || 'bottom');
+
+  document.getElementById('tickerBgColor').value      = cfg.ticker_bg_color   || '#1e293b';
+  document.getElementById('tickerBgColorText').value  = cfg.ticker_bg_color   || '#1e293b';
+  document.getElementById('tickerTextColor').value    = cfg.ticker_text_color || '#ffffff';
+  document.getElementById('tickerTextColorText').value= cfg.ticker_text_color || '#ffffff';
+  document.getElementById('tickerShowLive').checked   = cfg.ticker_show_live !== false;
+
+  const afsBtn = document.getElementById('autoFsToggle');
+  const afsTxt = document.getElementById('autoFsStatusText');
+  if (afsBtn) afsBtn.classList.toggle('on', !!cfg.auto_fullscreen);
+  if (afsTxt) afsTxt.textContent = cfg.auto_fullscreen ? 'Enabled' : 'Disabled';
+
+  modal.style.display = 'flex';
+}
+
+function closeTickerModal() {
+  const modal = document.getElementById('tickerModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function _tickerToggleEnabled() {
+  const btn    = document.getElementById('tickerEnableToggle');
+  const status = document.getElementById('tickerStatusText');
+  const on     = btn.classList.toggle('on');
+  status.textContent = on ? 'Enabled' : 'Disabled';
+}
+
+function _autoFsToggle() {
+  const btn    = document.getElementById('autoFsToggle');
+  const status = document.getElementById('autoFsStatusText');
+  const on     = btn.classList.toggle('on');
+  status.textContent = on ? 'Enabled' : 'Disabled';
+}
+
+function _tickerSelectOpt(btn, group) {
+  const groupMap = {height: 'tickerHeightGroup', speed: 'tickerSpeedGroup', position: 'tickerPositionGroup'};
+  const container = document.getElementById(groupMap[group]);
+  if (!container) return;
+  container.querySelectorAll('.ticker-radio-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+}
+
+function _tickerSetGroup(groupId, value) {
+  const container = document.getElementById(groupId);
+  if (!container) return;
+  container.querySelectorAll('.ticker-radio-btn').forEach(b => {
+    b.classList.toggle('selected', b.dataset.val === value);
+  });
+}
+
+function _tickerGetGroup(groupId) {
+  const container = document.getElementById(groupId);
+  if (!container) return null;
+  const sel = container.querySelector('.ticker-radio-btn.selected');
+  return sel ? sel.dataset.val : null;
+}
+
+async function saveTickerSettings() {
+  const deviceId = document.getElementById('tickerDeviceId').value;
+  if (!deviceId) return;
+
+  const payload = {
+    ticker_enabled:  document.getElementById('tickerEnableToggle').classList.contains('on'),
+    ticker_height:   _tickerGetGroup('tickerHeightGroup')   || 'medium',
+    ticker_speed:    _tickerGetGroup('tickerSpeedGroup')    || 'normal',
+    ticker_position: _tickerGetGroup('tickerPositionGroup') || 'bottom',
+    ticker_bg_color:   document.getElementById('tickerBgColorText').value  || '#1e293b',
+    ticker_text_color: document.getElementById('tickerTextColorText').value || '#ffffff',
+    ticker_show_live:  document.getElementById('tickerShowLive').checked,
+    auto_fullscreen:   document.getElementById('autoFsToggle').classList.contains('on'),
+  };
+
+  try {
+    const res = await fetch(`/api/clients/${encodeURIComponent(deviceId)}/ticker`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'save failed');
+    closeTickerModal();
+    if (typeof loadClients === 'function') loadClients();
+  } catch(e) {
+    alert('Failed to save ticker settings: ' + e.message);
+  }
+}
 </script>
+
+<!-- ══ NEWS MESSAGE MODAL ══════════════════════════════════ -->
+<div class="sch-modal-overlay" id="newsMessageModal" style="display:none" onclick="if(event.target===this)closeNewsModal()">
+  <div class="sch-modal" style="max-width:520px">
+    <div class="sch-modal-hdr">
+      <span id="newsModalTitle">Add Message</span>
+      <button class="sch-modal-close" onclick="closeNewsModal()">×</button>
+    </div>
+    <div class="sch-modal-body">
+      <input type="hidden" id="newsEditId">
+      <div>
+        <label class="form-label">Title *</label>
+        <input type="text" id="newsMsgTitle" class="form-input" placeholder="e.g. Company Update" maxlength="100">
+      </div>
+      <div>
+        <label class="form-label">Message *</label>
+        <textarea id="newsMsgBody" class="form-input" rows="3" placeholder="Type the scrolling message text here..." maxlength="500" style="resize:vertical;min-height:72px"></textarea>
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <div style="flex:1;min-width:110px">
+          <label class="form-label">Priority <small style="font-weight:400;color:var(--text-3)">(higher = first)</small></label>
+          <input type="number" id="newsMsgPriority" class="form-input" value="0" min="0" max="100" style="height:36px">
+        </div>
+        <div style="flex:1;min-width:120px">
+          <label class="form-label">Start Date <small style="font-weight:400;color:var(--text-3)">(optional)</small></label>
+          <input type="date" id="newsMsgStartDate" class="form-input" style="height:36px">
+        </div>
+        <div style="flex:1;min-width:120px">
+          <label class="form-label">End Date <small style="font-weight:400;color:var(--text-3)">(optional)</small></label>
+          <input type="date" id="newsMsgEndDate" class="form-input" style="height:36px">
+        </div>
+      </div>
+      <div>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+          <input type="checkbox" id="newsMsgEnabled" checked style="width:15px;height:15px;accent-color:var(--primary)">
+          Enable this message immediately
+        </label>
+      </div>
+    </div>
+    <div class="sch-modal-foot">
+      <button class="btn btn-secondary btn-sm" onclick="closeNewsModal()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="saveNewsMessage()">Save Message</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ TICKER SETTINGS MODAL ═══════════════════════════════ -->
+<div class="ticker-modal-overlay" id="tickerModal" style="display:none" onclick="if(event.target===this)closeTickerModal()">
+  <div class="ticker-modal">
+    <div class="ticker-modal-hdr">
+      <span>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px"><path d="M4 6h16M4 12h16M4 18h8"/></svg>
+        News Ticker Settings
+      </span>
+      <button class="sch-modal-close" onclick="closeTickerModal()">×</button>
+    </div>
+    <div class="ticker-modal-body">
+      <input type="hidden" id="tickerDeviceId">
+      <div class="ticker-enable-row">
+        <button id="tickerEnableToggle" class="ticker-en-toggle" onclick="_tickerToggleEnabled()"></button>
+        <span style="font-size:13.5px;font-weight:600">Enable News Ticker</span>
+        <span id="tickerStatusText" style="font-size:12px;color:var(--text-3)">Disabled</span>
+      </div>
+      <div class="ticker-enable-row" style="padding-top:12px;border-top:1px solid var(--border)">
+        <button id="autoFsToggle" class="ticker-en-toggle" onclick="_autoFsToggle()"></button>
+        <span style="font-size:13.5px;font-weight:600">Auto Fullscreen</span>
+        <span id="autoFsStatusText" style="font-size:12px;color:var(--text-3)">Disabled</span>
+      </div>
+      <div id="tickerConfigFields">
+        <div>
+          <div class="ticker-field-label">Ticker Height</div>
+          <div class="ticker-radio-group" id="tickerHeightGroup">
+            <button class="ticker-radio-btn" data-val="small" onclick="_tickerSelectOpt(this,'height')">Small</button>
+            <button class="ticker-radio-btn selected" data-val="medium" onclick="_tickerSelectOpt(this,'height')">Medium</button>
+            <button class="ticker-radio-btn" data-val="large" onclick="_tickerSelectOpt(this,'height')">Large</button>
+          </div>
+        </div>
+        <div>
+          <div class="ticker-field-label">Scroll Speed</div>
+          <div class="ticker-radio-group" id="tickerSpeedGroup">
+            <button class="ticker-radio-btn" data-val="slow" onclick="_tickerSelectOpt(this,'speed')">Slow</button>
+            <button class="ticker-radio-btn selected" data-val="normal" onclick="_tickerSelectOpt(this,'speed')">Normal</button>
+            <button class="ticker-radio-btn" data-val="fast" onclick="_tickerSelectOpt(this,'speed')">Fast</button>
+          </div>
+        </div>
+        <div>
+          <div class="ticker-field-label">Position</div>
+          <div class="ticker-radio-group" id="tickerPositionGroup">
+            <button class="ticker-radio-btn selected" data-val="bottom" onclick="_tickerSelectOpt(this,'position')">Bottom</button>
+            <button class="ticker-radio-btn" data-val="top" onclick="_tickerSelectOpt(this,'position')">Top</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap">
+          <div style="flex:1;min-width:130px">
+            <div class="ticker-field-label">Background Color</div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="color" id="tickerBgColor" value="#1e293b" oninput="document.getElementById('tickerBgColorText').value=this.value" style="height:34px;width:48px;border-radius:7px;border:1px solid var(--border);cursor:pointer;padding:2px">
+              <input type="text" id="tickerBgColorText" class="form-input" value="#1e293b" style="height:34px;flex:1;font-size:12px;font-family:monospace" maxlength="7" oninput="if(/^#[0-9a-fA-F]{6}$/.test(this.value))document.getElementById('tickerBgColor').value=this.value">
+            </div>
+          </div>
+          <div style="flex:1;min-width:130px">
+            <div class="ticker-field-label">Text Color</div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="color" id="tickerTextColor" value="#ffffff" oninput="document.getElementById('tickerTextColorText').value=this.value" style="height:34px;width:48px;border-radius:7px;border:1px solid var(--border);cursor:pointer;padding:2px">
+              <input type="text" id="tickerTextColorText" class="form-input" value="#ffffff" style="height:34px;flex:1;font-size:12px;font-family:monospace" maxlength="7" oninput="if(/^#[0-9a-fA-F]{6}$/.test(this.value))document.getElementById('tickerTextColor').value=this.value">
+            </div>
+          </div>
+        </div>
+        <div>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+            <input type="checkbox" id="tickerShowLive" checked style="width:15px;height:15px;accent-color:var(--primary)">
+            Show LIVE badge
+          </label>
+        </div>
+      </div>
+    </div>
+    <div class="ticker-modal-foot">
+      <button class="btn btn-secondary btn-sm" onclick="closeTickerModal()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="saveTickerSettings()">Save Settings</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>

@@ -80,6 +80,7 @@ UPLOAD_TMP_DIR = Path.home() / 'signage' / 'uploads_tmp'
 UPLOAD_TMP_DIR.mkdir(parents=True, exist_ok=True)
 ALLOWED_VIDEO_EXTENSIONS = {'.mp4', '.avi', '.mov', '.mkv', '.webm'}
 ALLOWED_PPT_EXTENSIONS = {'.pptx', '.ppt', '.pdf'}
+NEWS_FILE = Path.home() / 'signage' / 'news.json'
 
 USERS = {'admin': generate_password_hash('signage')}
 
@@ -2019,6 +2020,144 @@ def _slack_worker():
 def too_large(e):
     flash('File too large! Maximum: 2GB', 'error')
     return redirect(url_for('dashboard'))
+
+# ═══════════════════════════════════════════════════════════
+#  NEWS / TICKER  — file storage + REST APIs
+# ═══════════════════════════════════════════════════════════
+
+def read_news() -> dict:
+    if NEWS_FILE.exists():
+        try:
+            return json.loads(NEWS_FILE.read_text(encoding='utf-8'))
+        except Exception:
+            pass
+    return {'messages': []}
+
+
+def write_news(data: dict) -> None:
+    NEWS_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding='utf-8')
+
+
+@app.route('/api/news', methods=['GET'])
+@login_required
+def api_news_list():
+    return jsonify(read_news())
+
+
+@app.route('/api/news', methods=['POST'])
+@login_required
+def api_news_create():
+    data = request.get_json(force=True) or {}
+    title = (data.get('title') or '').strip()
+    message = (data.get('message') or '').strip()
+    if not title or not message:
+        return jsonify({'ok': False, 'error': 'title and message required'}), 400
+    store = read_news()
+    mid = 'msg_' + hashlib.md5(f"{title}{time.time()}".encode()).hexdigest()[:8]
+    now_iso = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+    msg = {
+        'id': mid,
+        'title': title,
+        'message': message,
+        'priority': int(data.get('priority') or 0),
+        'enabled': bool(data.get('enabled', True)),
+        'start_date': (data.get('start_date') or '').strip() or None,
+        'end_date':   (data.get('end_date')   or '').strip() or None,
+        'created_at': now_iso,
+        'updated_at': now_iso,
+    }
+    store['messages'].append(msg)
+    write_news(store)
+    return jsonify({'ok': True, 'message': msg}), 201
+
+
+@app.route('/api/news/<mid>', methods=['PUT'])
+@login_required
+def api_news_update(mid):
+    data = request.get_json(force=True) or {}
+    store = read_news()
+    msg = next((m for m in store.get('messages', []) if m['id'] == mid), None)
+    if not msg:
+        return jsonify({'ok': False, 'error': 'not found'}), 404
+    if 'title'      in data: msg['title']      = (data['title'] or '').strip()
+    if 'message'    in data: msg['message']    = (data['message'] or '').strip()
+    if 'priority'   in data: msg['priority']   = int(data['priority'] or 0)
+    if 'enabled'    in data: msg['enabled']    = bool(data['enabled'])
+    if 'start_date' in data: msg['start_date'] = (data['start_date'] or '').strip() or None
+    if 'end_date'   in data: msg['end_date']   = (data['end_date']   or '').strip() or None
+    msg['updated_at'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+    write_news(store)
+    return jsonify({'ok': True, 'message': msg})
+
+
+@app.route('/api/news/<mid>', methods=['DELETE'])
+@login_required
+def api_news_delete(mid):
+    store = read_news()
+    before = len(store.get('messages', []))
+    store['messages'] = [m for m in store.get('messages', []) if m['id'] != mid]
+    if len(store['messages']) == before:
+        return jsonify({'ok': False, 'error': 'not found'}), 404
+    write_news(store)
+    return jsonify({'ok': True})
+
+
+@app.route('/api/news/active', methods=['GET'])
+def api_news_active():
+    """Public endpoint — returns currently active messages for web players."""
+    try:
+        from ticker_engine import TickerEngine
+        engine = TickerEngine()
+        return jsonify({'ok': True, 'messages': engine.get_all_messages()})
+    except Exception:
+        logger.exception('Failed to fetch active news')
+        return jsonify({'ok': True, 'messages': []})
+
+
+# ── Per-display ticker settings ─────────────────────────────
+
+_TICKER_DEFAULTS = {
+    'ticker_enabled':  False,
+    'ticker_position': 'bottom',
+    'ticker_speed':    'normal',
+    'ticker_height':   'medium',
+    'ticker_bg_color':   '#1e293b',
+    'ticker_text_color': '#ffffff',
+    'ticker_show_live':  True,
+    'auto_fullscreen':   False,
+}
+
+
+@app.route('/api/clients/<cid>/ticker', methods=['GET'])
+def api_ticker_get(cid):
+    store = read_clients()
+    client = next((c for c in store.get('clients', []) if c['id'] == cid), None)
+    if not client:
+        return jsonify({'ok': False, 'error': 'not found'}), 404
+    ticker = {**_TICKER_DEFAULTS, **(client.get('ticker_settings') or {})}
+    return jsonify({'ok': True, 'ticker': ticker})
+
+
+@app.route('/api/clients/<cid>/ticker', methods=['PUT'])
+@login_required
+def api_ticker_update(cid):
+    data = request.get_json(force=True) or {}
+    store = read_clients()
+    client = next((c for c in store.get('clients', []) if c['id'] == cid), None)
+    if not client:
+        return jsonify({'ok': False, 'error': 'not found'}), 404
+    existing = client.get('ticker_settings') or {}
+    # Merge only known fields to prevent injection
+    for key in _TICKER_DEFAULTS:
+        if key in data:
+            existing[key] = data[key]
+    client['ticker_settings'] = existing
+    write_clients(store)
+    ticker = {**_TICKER_DEFAULTS, **existing}
+    return jsonify({'ok': True, 'ticker': ticker})
+
+
+# ═══════════════════════════════════════════════════════════
 
 @app.errorhandler(500)
 def internal_error(e):

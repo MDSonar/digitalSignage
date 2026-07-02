@@ -37,6 +37,7 @@ COPY web_player.py .
 COPY utils.py .
 COPY recurrence_engine.py .
 COPY scheduler_engine.py .
+COPY ticker_engine.py .
 COPY templates/ ./templates/
 COPY entrypoint.sh .
 RUN chmod +x /app/entrypoint.sh
