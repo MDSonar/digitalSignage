@@ -42,8 +42,11 @@ def write_config(data: dict) -> bool:
 def atomic_write(path: Path, data: str) -> bool:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(path.suffix + '.tmp')
-        tmp.write_text(data)
+        # Use a unique temp filename per call to prevent concurrent-write collisions
+        # between Flask threads (e.g. two simultaneous PUT requests both writing
+        # clients.json.tmp would corrupt the file and wipe registered displays).
+        tmp = path.parent / f'.{path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp'
+        tmp.write_text(data, encoding='utf-8')
         tmp.replace(path)
         return True
     except Exception:

@@ -80,7 +80,8 @@ UPLOAD_TMP_DIR = Path.home() / 'signage' / 'uploads_tmp'
 UPLOAD_TMP_DIR.mkdir(parents=True, exist_ok=True)
 ALLOWED_VIDEO_EXTENSIONS = {'.mp4', '.avi', '.mov', '.mkv', '.webm'}
 ALLOWED_PPT_EXTENSIONS = {'.pptx', '.ppt', '.pdf'}
-NEWS_FILE = Path.home() / 'signage' / 'news.json'
+NEWS_FILE       = Path.home() / 'signage' / 'news.json'
+IDLE_CARDS_FILE = Path.home() / 'signage' / 'idle_cards.json'
 
 USERS = {'admin': generate_password_hash('signage')}
 
@@ -2038,6 +2039,26 @@ def write_news(data: dict) -> None:
     NEWS_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding='utf-8')
 
 
+def read_idle_cards() -> dict:
+    if IDLE_CARDS_FILE.exists():
+        try:
+            return json.loads(IDLE_CARDS_FILE.read_text(encoding='utf-8'))
+        except Exception:
+            pass
+    return {'cards': []}
+
+
+def write_idle_cards(data: dict) -> None:
+    IDLE_CARDS_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding='utf-8')
+
+
+_IDLE_DEFAULTS = {
+    'idle_mode':       'clock',   # 'clock' | 'cards'
+    'card_transition': 'fade',    # 'fade' | 'slide' | 'slideup'
+    'card_duration':   10,        # seconds per card
+}
+
+
 @app.route('/api/news', methods=['GET'])
 @login_required
 def api_news_list():
@@ -2114,6 +2135,71 @@ def api_news_active():
         return jsonify({'ok': True, 'messages': []})
 
 
+# ── Idle Cards ───────────────────────────────────────────────
+
+@app.route('/api/idle-cards', methods=['GET'])
+@login_required
+def api_idle_cards_list():
+    return jsonify(read_idle_cards())
+
+
+@app.route('/api/idle-cards', methods=['POST'])
+@login_required
+def api_idle_cards_create():
+    data = request.get_json(force=True) or {}
+    quote = (data.get('quote') or '').strip()
+    if not quote:
+        return jsonify({'ok': False, 'error': 'quote required'}), 400
+    store = read_idle_cards()
+    cid = 'card_' + hashlib.md5(f"{quote}{time.time()}".encode()).hexdigest()[:8]
+    now_iso = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+    card = {
+        'id':              cid,
+        'title':           (data.get('title')    or '').strip(),
+        'quote':           quote,
+        'author':          (data.get('author')   or '').strip(),
+        'category':        (data.get('category') or '').strip(),
+        'priority':        int(data.get('priority') or 0),
+        'enabled':         bool(data.get('enabled', True)),
+        'backgroundStyle': (data.get('backgroundStyle') or 'default'),
+        'created_at':      now_iso,
+        'updated_at':      now_iso,
+    }
+    store['cards'].append(card)
+    write_idle_cards(store)
+    return jsonify({'ok': True, 'card': card}), 201
+
+
+@app.route('/api/idle-cards/<cid>', methods=['PUT'])
+@login_required
+def api_idle_cards_update(cid):
+    data = request.get_json(force=True) or {}
+    store = read_idle_cards()
+    card = next((c for c in store.get('cards', []) if c['id'] == cid), None)
+    if not card:
+        return jsonify({'ok': False, 'error': 'not found'}), 404
+    for field in ('title', 'quote', 'author', 'category', 'backgroundStyle'):
+        if field in data:
+            card[field] = (data[field] or '').strip()
+    if 'priority' in data:  card['priority'] = int(data['priority'] or 0)
+    if 'enabled'  in data:  card['enabled']  = bool(data['enabled'])
+    card['updated_at'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+    write_idle_cards(store)
+    return jsonify({'ok': True, 'card': card})
+
+
+@app.route('/api/idle-cards/<cid>', methods=['DELETE'])
+@login_required
+def api_idle_cards_delete(cid):
+    store = read_idle_cards()
+    before = len(store.get('cards', []))
+    store['cards'] = [c for c in store.get('cards', []) if c['id'] != cid]
+    if len(store['cards']) == before:
+        return jsonify({'ok': False, 'error': 'not found'}), 404
+    write_idle_cards(store)
+    return jsonify({'ok': True})
+
+
 # ── Per-display ticker settings ─────────────────────────────
 
 _TICKER_DEFAULTS = {
@@ -2155,6 +2241,35 @@ def api_ticker_update(cid):
     write_clients(store)
     ticker = {**_TICKER_DEFAULTS, **existing}
     return jsonify({'ok': True, 'ticker': ticker})
+
+
+# ── Per-display idle-screen settings ────────────────────────
+
+@app.route('/api/clients/<cid>/idle', methods=['GET'])
+def api_idle_settings_get(cid):
+    store = read_clients()
+    client = next((c for c in store.get('clients', []) if c['id'] == cid), None)
+    if not client:
+        return jsonify({'ok': False, 'error': 'not found'}), 404
+    settings = {**_IDLE_DEFAULTS, **(client.get('idle_settings') or {})}
+    return jsonify({'ok': True, 'idle': settings})
+
+
+@app.route('/api/clients/<cid>/idle', methods=['PUT'])
+@login_required
+def api_idle_settings_update(cid):
+    data = request.get_json(force=True) or {}
+    store = read_clients()
+    client = next((c for c in store.get('clients', []) if c['id'] == cid), None)
+    if not client:
+        return jsonify({'ok': False, 'error': 'not found'}), 404
+    existing = client.get('idle_settings') or {}
+    for key in _IDLE_DEFAULTS:
+        if key in data:
+            existing[key] = data[key]
+    client['idle_settings'] = existing
+    write_clients(store)
+    return jsonify({'ok': True, 'idle': {**_IDLE_DEFAULTS, **existing}})
 
 
 # ═══════════════════════════════════════════════════════════

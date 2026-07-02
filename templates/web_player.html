@@ -259,6 +259,134 @@
         .wait-sub { opacity: 0.55; text-align: center; font-size: 0.95rem; line-height: 1.6; }
         .wait-device-info { margin-top: 20px; opacity: 0.35; font-size: 0.78rem; font-family: monospace; }
 
+        /* ── Idle Screen ─────────────────────────────────────── */
+        #schedule-standby {
+            position: fixed; inset: 0;
+            background: #0b0d1a;
+            color: #fff;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            z-index: 10;
+        }
+        /* Clock mode — centered */
+        #idle-clock-mode {
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            height: 100%; text-align: center; padding: 40px;
+        }
+        #sch-standby-name {
+            font-size: 13px; font-weight: 700; letter-spacing: .08em;
+            text-transform: uppercase; color: rgba(255,255,255,.45); margin-bottom: 10px;
+        }
+        #sch-standby-clock {
+            font-size: 72px; font-weight: 800; letter-spacing: -3px;
+            line-height: 1; margin-bottom: 8px;
+        }
+        #sch-standby-date {
+            font-size: 16px; color: rgba(255,255,255,.5); margin-bottom: 32px;
+        }
+        #sch-standby-next {
+            font-size: 14px; color: rgba(255,255,255,.45);
+            background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1);
+            border-radius: 10px; padding: 12px 22px;
+        }
+        /* Cards mode — full-screen layout */
+        #idle-cards-mode {
+            position: relative; height: 100%;
+            display: flex; flex-direction: column;
+        }
+        /* Corner clock — top-right */
+        #idle-clock-corner {
+            position: absolute; top: 28px; right: 36px;
+            text-align: right; pointer-events: none; z-index: 1;
+        }
+        #idle-corner-time {
+            font-size: 48px; font-weight: 800; letter-spacing: -2.5px; line-height: 1;
+        }
+        #idle-corner-date {
+            font-size: 14px; color: rgba(255,255,255,.5); margin-top: 5px; font-weight: 500;
+        }
+        #idle-corner-name { display: none; }
+        /* ── Environment Widget ─────────────────────────────────── */
+        .env-widget {
+            display: flex; flex-direction: column; align-items: center; gap: 7px;
+            margin-bottom: 20px;
+            animation: env-fade-in .6s ease both;
+        }
+        .env-widget.env-hidden { display: none !important; }
+        @keyframes env-fade-in {
+            from { opacity: 0; transform: translateY(5px); }
+            to   { opacity: 1; transform: none; }
+        }
+        .env-primary {
+            display: flex; align-items: center; gap: 8px;
+            color: rgba(255,255,255,.88);
+        }
+        .env-primary .env-icn  { font-size: 22px; line-height: 1; }
+        .env-primary .env-tmp  { font-size: 22px; font-weight: 700; letter-spacing: -.5px; }
+        .env-primary .env-cnd  { font-size: 14px; color: rgba(255,255,255,.5); }
+        .env-location { font-size: 13px; color: rgba(255,255,255,.38); letter-spacing: .04em; }
+        .env-row {
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center;
+            font-size: 13px; color: rgba(255,255,255,.55);
+        }
+        .env-row .env-sep  { color: rgba(255,255,255,.2); }
+        .env-row .env-aqi  { font-weight: 700; }
+        .env-secondary {
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center;
+            font-size: 12px; color: rgba(255,255,255,.38);
+        }
+        .env-secondary.env-hidden { display: none !important; }
+        .env-secondary .env-sep { color: rgba(255,255,255,.15); }
+        /* Corner compact strip (cards mode top-right) */
+        .env-corner { margin-top: 10px; text-align: right; }
+        .env-corner.env-hidden { display: none !important; }
+        .env-corner-row { font-size: 14px; color: rgba(255,255,255,.8); font-weight: 600; }
+        .env-corner-aqi { font-size: 12px; font-weight: 700; margin-top: 4px; }
+        /* Card content area — fills remaining viewport */
+        #idle-cards-center {
+            flex: 1; min-height: 0; display: flex; flex-direction: column;
+            padding: 60px 100px 40px;
+        }
+        /* Carousel rail — both slots always position:absolute, no layout shift */
+        #idle-card-rail {
+            flex: 1; min-height: 0; position: relative; overflow: hidden;
+        }
+        .idle-card-slide {
+            position: absolute; inset: 0;
+            will-change: transform;
+            transition: transform 450ms cubic-bezier(.4,0,.2,1);
+        }
+        .idle-card-slide.is-active { transform: translateX(0); }
+        .idle-card-slide.is-next   { transform: translateX(100%); }
+        .idle-card-slide.is-prev   { transform: translateX(-100%); }
+        .idle-card-inner {
+            position: absolute; inset: 0;
+            display: flex; flex-direction: column; justify-content: center;
+            gap: 14px;
+        }
+        .idle-card-icon { display: none; }
+        .idle-card-author {
+            font-size: 12px; font-weight: 800; letter-spacing: .13em;
+            text-transform: uppercase; color: #6c6fff; font-style: normal;
+        }
+        .idle-card-author:empty { display: none; }
+        .idle-card-quote {
+            font-size: clamp(32px, 3.8vw, 58px);
+            font-weight: 800; line-height: 1.2;
+            color: #ffffff; max-width: min(860px, 90%);
+        }
+        /* Dot indicators */
+        #idle-card-dots {
+            display: flex; gap: 8px; align-items: center; justify-content: center;
+            padding: 24px 0 0; flex-shrink: 0;
+        }
+        .idle-dot {
+            width: 7px; height: 7px; border-radius: 50%;
+            background: rgba(255,255,255,.2); transition: all .3s ease;
+        }
+        .idle-dot.active {
+            width: 26px; border-radius: 4px; background: rgba(255,255,255,.75);
+        }
         /* ── News Ticker ─────────────────────────────────────── */
         #ticker-overlay {
             position: fixed;
@@ -372,15 +500,74 @@
         <div class="wait-device-info" id="wait-device-info"></div>
     </div>
 
-    <!-- Schedule Standby Screen (assigned to schedule but no block active right now) -->
-    <div id="schedule-standby" class="hidden" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#0b0d1a;color:#fff;font-family:'Plus Jakarta Sans',sans-serif;text-align:center;padding:40px">
-        <div style="width:64px;height:64px;border-radius:18px;background:linear-gradient(135deg,#5b50f0,#7c83ff);display:flex;align-items:center;justify-content:center;margin-bottom:28px">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    <!-- Idle Screen: clock mode OR rotating idle cards -->
+    <div id="schedule-standby" class="hidden">
+
+        <!-- CLOCK MODE: original centered layout (shown by default) -->
+        <div id="idle-clock-mode">
+            <div style="width:64px;height:64px;border-radius:18px;background:linear-gradient(135deg,#5b50f0,#7c83ff);display:flex;align-items:center;justify-content:center;margin-bottom:28px">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            </div>
+            <div id="sch-standby-name">Schedule</div>
+            <div id="sch-standby-clock">--:--</div>
+            <div id="sch-standby-date">—</div>
+            <!-- Environment Widget — filled once /api/environment responds -->
+            <div id="env-widget-clock" class="env-widget env-hidden">
+                <div class="env-primary">
+                    <span class="env-icn" id="env-icon"></span>
+                    <span class="env-tmp" id="env-temp"></span>
+                    <span class="env-cnd" id="env-cond"></span>
+                </div>
+                <div class="env-location" id="env-location"></div>
+                <div class="env-row">
+                    <span class="env-aqi" id="env-aqi"></span>
+                    <span class="env-sep">·</span>
+                    <span id="env-humidity"></span>
+                    <span class="env-sep">·</span>
+                    <span id="env-feels"></span>
+                </div>
+                <div class="env-secondary env-hidden" id="env-secondary">
+                    <span id="env-wind"></span>
+                    <span class="env-sep">·</span>
+                    <span id="env-uv"></span>
+                </div>
+            </div>
+            <div id="sch-standby-next">Nothing else scheduled today</div>
         </div>
-        <div id="sch-standby-name" style="font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.45);margin-bottom:10px">Schedule</div>
-        <div id="sch-standby-clock" style="font-size:72px;font-weight:800;letter-spacing:-3px;line-height:1;margin-bottom:8px">--:--</div>
-        <div id="sch-standby-date" style="font-size:16px;color:rgba(255,255,255,.5);margin-bottom:32px">—</div>
-        <div id="sch-standby-next" style="font-size:14px;color:rgba(255,255,255,.45);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:12px 22px">Nothing else scheduled today</div>
+
+        <!-- CARDS MODE: full-screen quote card + corner clock/weather -->
+        <div id="idle-cards-mode" style="display:none">
+            <div id="idle-clock-corner">
+                <div id="idle-corner-time">--:--</div>
+                <div id="idle-corner-date">—</div>
+                <div id="idle-corner-name"></div>
+                <div id="env-corner" class="env-corner env-hidden">
+                    <div class="env-corner-row">
+                        <span id="env-c-icon"></span>
+                        <span id="env-c-temp"></span>
+                    </div>
+                    <div class="env-corner-aqi" id="env-c-aqi"></div>
+                </div>
+            </div>
+            <div id="idle-cards-center">
+                <div id="idle-card-rail">
+                    <div id="idle-card-a" class="idle-card-slide is-active">
+                        <div class="idle-card-inner">
+                            <div class="idle-card-author"></div>
+                            <div class="idle-card-quote"></div>
+                        </div>
+                    </div>
+                    <div id="idle-card-b" class="idle-card-slide is-next">
+                        <div class="idle-card-inner">
+                            <div class="idle-card-author"></div>
+                            <div class="idle-card-quote"></div>
+                        </div>
+                    </div>
+                </div>
+                <div id="idle-card-dots"></div>
+            </div>
+        </div>
+
     </div>
 
     <!-- Playlist Selection Screen -->
@@ -1335,45 +1522,242 @@
 
         let _schStandbyClock = null;
 
+        // ── Idle Cards state ──────────────────────────────────────
+        let _idleCards        = [];
+        let _idleCardIdx      = 0;
+        let _idleRotateTimer  = null;
+        let _activeSlot       = 'a';   // 'a' or 'b' — which slot is currently visible
+        let _idleSettingsPoll = null;
+        let _idleLastHash     = '';
+
+        function _escIdle(s) {
+            return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        function _idleClockTick() {
+            const n  = new Date();
+            const hh = String(n.getHours()).padStart(2,'0');
+            const mm = String(n.getMinutes()).padStart(2,'0');
+            const timeStr = `${hh}:${mm}`;
+            const days   = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            const dateStr    = `${days[n.getDay()]}, ${n.getDate()} ${months[n.getMonth()]} ${n.getFullYear()}`;
+            const cornerDate = `${days[n.getDay()].slice(0,3)}, ${n.getDate()} ${months[n.getMonth()]}`;
+            // Clock mode elements
+            const clk = document.getElementById('sch-standby-clock');
+            const dat = document.getElementById('sch-standby-date');
+            if (clk) clk.textContent = timeStr;
+            if (dat) dat.textContent = dateStr;
+            // Cards mode corner clock (compact date)
+            const ct = document.getElementById('idle-corner-time');
+            const cd = document.getElementById('idle-corner-date');
+            if (ct) ct.textContent = timeStr;
+            if (cd) cd.textContent = cornerDate;
+        }
+
+        function _renderIdleCard(card, slotEl) {
+            if (!slotEl || !card) return;
+            const inner = slotEl.querySelector('.idle-card-inner');
+            if (!inner) return;
+            inner.querySelector('.idle-card-quote').textContent  = card.quote  || '';
+            const authorEl = inner.querySelector('.idle-card-author');
+            authorEl.textContent   = card.author || '';
+            authorEl.style.display = card.author ? '' : 'none';
+        }
+
+        function _updateIdleDots() {
+            const dotsEl = document.getElementById('idle-card-dots');
+            if (!dotsEl) return;
+            if (_idleCards.length <= 1) { dotsEl.innerHTML = ''; return; }
+            dotsEl.innerHTML = _idleCards.map((_, i) =>
+                `<span class=”idle-dot${i === _idleCardIdx ? ' active' : ''}”></span>`
+            ).join('');
+        }
+
+        function _transitionToCard(idx) {
+            _idleCardIdx = ((idx % _idleCards.length) + _idleCards.length) % _idleCards.length;
+            const card    = _idleCards[_idleCardIdx];
+            const nextKey = _activeSlot === 'a' ? 'b' : 'a';
+            const curSlot = document.getElementById('idle-card-' + _activeSlot);
+            const nxtSlot = document.getElementById('idle-card-' + nextKey);
+            if (!curSlot || !nxtSlot || !card) return;
+
+            // Populate next slot while it is off-screen (no visual change)
+            _renderIdleCard(card, nxtSlot);
+            _updateIdleDots();
+
+            // Trigger slide: current → left, next → center
+            requestAnimationFrame(() => {
+                curSlot.classList.remove('is-active');
+                curSlot.classList.add('is-prev');
+                nxtSlot.classList.remove('is-next');
+                nxtSlot.classList.add('is-active');
+            });
+
+            _activeSlot = nextKey;
+
+            // After animation completes, reset outgoing slot to the right
+            const prevKey = nextKey === 'a' ? 'b' : 'a';
+            setTimeout(() => {
+                const old = document.getElementById('idle-card-' + prevKey);
+                if (!old) return;
+                old.style.transition = 'none';
+                old.classList.remove('is-prev');
+                old.classList.add('is-next');
+                void old.offsetWidth;         // force reflow before re-enabling transition
+                old.style.transition = '';
+            }, 440);
+        }
+
+        function _startIdleRotation() {
+            _stopIdleRotation();
+            if (_idleCards.length === 0) return;
+            _idleCardIdx = 0;
+            _activeSlot  = 'a';
+
+            const slotA = document.getElementById('idle-card-a');
+            const slotB = document.getElementById('idle-card-b');
+            if (!slotA || !slotB) return;
+
+            // Hard-reset both slots with no transition
+            slotA.style.transition = 'none';
+            slotB.style.transition = 'none';
+            slotA.className = 'idle-card-slide is-active';
+            slotB.className = 'idle-card-slide is-next';
+            void slotA.offsetWidth;           // flush transition:none before re-enabling
+            slotA.style.transition = '';
+            slotB.style.transition = '';
+
+            _renderIdleCard(_idleCards[0], slotA);
+            _updateIdleDots();
+
+            if (_idleCards.length > 1) {
+                _idleRotateTimer = setInterval(() => {
+                    _transitionToCard((_idleCardIdx + 1) % _idleCards.length);
+                }, 10000);
+            }
+        }
+
+        function _stopIdleRotation() {
+            if (_idleRotateTimer) { clearInterval(_idleRotateTimer); _idleRotateTimer = null; }
+        }
+
+        function _showIdleClockMode(scheduleName, nextBlock) {
+            document.getElementById('idle-clock-mode').style.display  = '';
+            document.getElementById('idle-cards-mode').style.display  = 'none';
+            const nm = document.getElementById('sch-standby-name');
+            const nx = document.getElementById('sch-standby-next');
+            if (nm) nm.textContent = scheduleName || 'Schedule';
+            if (nx) nx.textContent = nextBlock
+                ? `Next: ${nextBlock.title}  at  ${nextBlock.start_time}`
+                : 'Nothing else scheduled today';
+        }
+
+        function _showIdleCardsMode(scheduleName, nextBlock) {
+            document.getElementById('idle-clock-mode').style.display  = 'none';
+            document.getElementById('idle-cards-mode').style.display  = '';
+            // Display name in corner
+            const nameEl = document.getElementById('idle-corner-name');
+            if (nameEl) {
+                try { nameEl.textContent = localStorage.getItem('signage_device_name') || ''; } catch(_) {}
+            }
+            // "Next block" label at bottom
+            const nxEl = document.getElementById('idle-cards-next-label');
+            if (nxEl) nxEl.textContent = nextBlock
+                ? `Next: ${nextBlock.title}  at  ${nextBlock.start_time}`
+                : '';
+            _startIdleRotation();
+        }
+
+        async function _initIdleScreen(scheduleName, nextBlock) {
+            if (!currentDeviceId) { _showIdleClockMode(scheduleName, nextBlock); return; }
+            try {
+                const [idleRes, cardsRes] = await Promise.all([
+                    fetch(`/api/clients/${encodeURIComponent(currentDeviceId)}/idle`),
+                    fetch('/api/idle-cards'),
+                ]);
+                const idleData  = await idleRes.json();
+                const cardsData = await cardsRes.json();
+                const idle  = (idleData.ok  && idleData.idle)   ? idleData.idle  : {};
+                const cards = (cardsData.ok && cardsData.cards) ? cardsData.cards : [];
+
+                _idleCards      = cards;
+                _idleLastHash   = JSON.stringify(idle) + '|' + cards.map(c => c.id + c.enabled).join(',');
+
+                if (idle.idle_mode === 'cards' && cards.length > 0) {
+                    _showIdleCardsMode(scheduleName, nextBlock);
+                } else {
+                    _showIdleClockMode(scheduleName, nextBlock);
+                }
+            } catch(e) {
+                console.warn('[Idle] Settings fetch failed:', e);
+                _showIdleClockMode(scheduleName, nextBlock);
+            }
+
+            // Start a 30s settings poll so live changes apply without a reload
+            if (!_idleSettingsPoll) {
+                _idleSettingsPoll = setInterval(async () => {
+                    if (!currentDeviceId) return;
+                    try {
+                        const [ir, cr] = await Promise.all([
+                            fetch(`/api/clients/${encodeURIComponent(currentDeviceId)}/idle`),
+                            fetch('/api/idle-cards'),
+                        ]);
+                        const id2 = await ir.json();
+                        const cd2 = await cr.json();
+                        const newHash = JSON.stringify(id2.idle||{}) + '|' +
+                            (cd2.cards||[]).map(c => c.id + c.enabled).join(',');
+                        if (newHash !== _idleLastHash) {
+                            _idleLastHash = newHash;
+                            _stopIdleRotation();
+                            const idle2  = id2.ok  ? id2.idle   : {};
+                            const cards2 = cd2.ok  ? cd2.cards  : [];
+                            _idleCards      = cards2;
+                            if (idle2.idle_mode === 'cards' && cards2.length > 0) {
+                                _showIdleCardsMode(_lastStandbyName, _lastStandbyNext);
+                            } else {
+                                _showIdleClockMode(_lastStandbyName, _lastStandbyNext);
+                            }
+                        }
+                    } catch(_) {}
+                }, 30000);
+            }
+        }
+
+        // Retained for the poll loop to re-apply name/next without re-fetching
+        let _lastStandbyName = '';
+        let _lastStandbyNext = null;
+
         function _showScheduleStandby(scheduleName, nextBlock) {
+            _lastStandbyName = scheduleName;
+            _lastStandbyNext = nextBlock;
+
             const standby = document.getElementById('schedule-standby');
             if (!standby) return;
             waitScreen.classList.add('hidden');
             standby.classList.remove('hidden');
-            // Start ticker (and auto-fullscreen) on the standby screen too.
-            // initTicker() is idempotent — the guard inside prevents duplicate polling.
+            standby.style.display = '';
+
+            // Start ticker + auto-fullscreen (idempotent)
             initTicker().catch(() => {});
-            standby.style.display = 'flex';
 
-            document.getElementById('sch-standby-name').textContent = scheduleName || 'Schedule';
-
-            if (nextBlock) {
-                document.getElementById('sch-standby-next').textContent =
-                    `Next: ${nextBlock.title}  at  ${nextBlock.start_time}`;
-            } else {
-                document.getElementById('sch-standby-next').textContent = 'Nothing else scheduled today';
-            }
-
-            // Live clock
+            // Start clock tick (updates both clock-mode and corner clock)
             if (_schStandbyClock) clearInterval(_schStandbyClock);
-            function _tick() {
-                const n = new Date();
-                const hh = String(n.getHours()).padStart(2,'0');
-                const mm = String(n.getMinutes()).padStart(2,'0');
-                document.getElementById('sch-standby-clock').textContent = `${hh}:${mm}`;
-                const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-                const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-                document.getElementById('sch-standby-date').textContent =
-                    `${days[n.getDay()]}, ${n.getDate()} ${months[n.getMonth()]} ${n.getFullYear()}`;
-            }
-            _tick();
-            _schStandbyClock = setInterval(_tick, 10000);
+            _idleClockTick();
+            _schStandbyClock = setInterval(_idleClockTick, 10000);
+
+            // Decide clock vs cards mode (async — shows clock immediately as fallback)
+            _showIdleClockMode(scheduleName, nextBlock);
+            _initIdleScreen(scheduleName, nextBlock).catch(() => {});
+            EnvironmentWidget.init();
         }
 
         function _hideScheduleStandby() {
             const standby = document.getElementById('schedule-standby');
             if (standby) { standby.classList.add('hidden'); standby.style.display = 'none'; }
-            if (_schStandbyClock) { clearInterval(_schStandbyClock); _schStandbyClock = null; }
+            if (_schStandbyClock)  { clearInterval(_schStandbyClock);  _schStandbyClock  = null; }
+            _stopIdleRotation();
+            if (_idleSettingsPoll) { clearInterval(_idleSettingsPoll); _idleSettingsPoll = null; }
         }
 
         function _showWaiting() {
@@ -1471,6 +1855,111 @@
         initDevice().catch(() => loadPlaylists());
 
         console.log('Ready - Device registration mode');
+
+        // ── ENVIRONMENT WIDGET ────────────────────────────────────
+        const EnvironmentWidget = (() => {
+            let _timer = null;
+            let _ready = false;
+
+            async function _fetch() {
+                if (_timer) { clearTimeout(_timer); _timer = null; }
+                try {
+                    const r = await fetch('/api/environment');
+                    const d = await r.json();
+                    if (d.ok) {
+                        _render(d);
+                        // Next refresh: when the server cache expires (+10s buffer)
+                        const delay = Math.max(60_000,
+                            (d.cached_at + d.cache_ttl) * 1000 - Date.now() + 10_000);
+                        _timer = setTimeout(_fetch, delay);
+                    } else {
+                        _hide();
+                        // Retry in 30 s while loading; 10 min if location permanently unavailable
+                        _timer = setTimeout(_fetch, d.reason === 'location_failed' ? 600_000 : 30_000);
+                    }
+                } catch(e) {
+                    console.warn('[Env] fetch failed:', e);
+                    _hide();
+                    _timer = setTimeout(_fetch, 60_000);
+                }
+            }
+
+            function _render(d) {
+                // ── Clock-mode widget ──────────────────────────────
+                const w = document.getElementById('env-widget-clock');
+                if (!w) return;
+
+                if (d.weather) {
+                    document.getElementById('env-icon').textContent  = d.weather.icon;
+                    document.getElementById('env-temp').textContent  = d.weather.temp_c + '°C';
+                    document.getElementById('env-cond').textContent  = d.weather.condition;
+                    document.getElementById('env-humidity').textContent = '💧 ' + d.weather.humidity + '%';
+                    document.getElementById('env-feels').textContent = 'Feels ' + d.weather.feels_like_c + '°C';
+
+                    // Secondary row (wind + UV)
+                    const parts = [];
+                    if (d.weather.wind_kph != null)      parts.push('🌬 ' + d.weather.wind_kph + ' km/h');
+                    if (d.weather.uv_index  != null)      parts.push('UV ' + d.weather.uv_index);
+                    const sec = document.getElementById('env-secondary');
+                    if (sec) {
+                        if (parts.length >= 1) {
+                            document.getElementById('env-wind').textContent = parts[0] || '';
+                            document.getElementById('env-uv').textContent   = parts[1] || '';
+                            sec.classList.toggle('env-hidden', parts.length < 2);
+                        } else {
+                            sec.classList.add('env-hidden');
+                        }
+                    }
+                }
+
+                if (d.location) {
+                    const loc = [d.location.city, d.location.region].filter(Boolean).join(', ');
+                    document.getElementById('env-location').textContent = loc;
+                }
+
+                if (d.aqi) {
+                    const el = document.getElementById('env-aqi');
+                    el.textContent  = 'AQI ' + d.aqi.value + ' · ' + d.aqi.label;
+                    el.style.color  = d.aqi.color;
+                }
+
+                w.classList.remove('env-hidden');
+
+                // ── Corner widget (cards mode) ─────────────────────
+                const cw = document.getElementById('env-corner');
+                if (cw) {
+                    if (d.weather) {
+                        document.getElementById('env-c-icon').textContent = d.weather.icon;
+                        document.getElementById('env-c-temp').textContent = d.weather.temp_c + '°C';
+                    }
+                    if (d.aqi) {
+                        const ael = document.getElementById('env-c-aqi');
+                        ael.textContent = 'AQI ' + d.aqi.value + ' · ' + d.aqi.label;
+                        ael.style.color = d.aqi.color;
+                    }
+                    cw.classList.remove('env-hidden');
+                }
+
+                if (!_ready) {
+                    _ready = true;
+                    console.log('[Env] Widget rendered — city:', d.location?.city);
+                }
+            }
+
+            function _hide() {
+                const w = document.getElementById('env-widget-clock');
+                if (w)  w.classList.add('env-hidden');
+                const cw = document.getElementById('env-corner');
+                if (cw) cw.classList.add('env-hidden');
+            }
+
+            function init() {
+                if (!_timer && !_ready) _fetch();
+            }
+
+            return { init };
+        })();
+        // ─────────────────────────────────────────────────────────
 
         // ── NEWS TICKER ───────────────────────────────────────────
         let _tickerCfg      = null;

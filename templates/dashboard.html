@@ -230,6 +230,8 @@ a{color:inherit;text-decoration:none}
 .dc-actions{display:flex;align-items:center;gap:5px}
 .dc-remove-btn{margin-left:auto;display:flex;align-items:center;gap:3px;height:26px;padding:0 9px;border-radius:5px;border:1px solid var(--border-2);background:transparent;color:var(--text-3);font-size:11px;cursor:pointer}
 .dc-remove-btn:hover{border-color:var(--danger);color:var(--danger);background:var(--danger-soft)}
+.dc-settings-btn{display:inline-flex;align-items:center;gap:4px;height:26px;padding:0 10px;border-radius:5px;border:1px solid var(--border);background:var(--surface-2);color:var(--text-2);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s}
+.dc-settings-btn:hover{border-color:var(--primary);color:var(--primary);background:rgba(91,80,240,.08)}
 .dc-empty{grid-column:1/-1;text-align:center;padding:56px 20px;color:var(--text-3)}
 .dc-empty p{font-size:13.5px;font-weight:500;margin-top:10px}
 .dc-empty small{font-size:12px;margin-top:3px;display:block}
@@ -499,6 +501,28 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
 .media-empty-state svg{display:block;margin:0 auto 14px;opacity:.2}
 .media-empty-state-title{font-size:13.5px;font-weight:600;color:var(--text-2);margin-bottom:5px}
 
+/* ── Idle Cards ────────────────────────────────────────── */
+.ic-list{display:flex;flex-direction:column;gap:8px}
+.ic-row{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-radius:10px;background:var(--surface-2);border:1px solid var(--border);transition:border-color .15s}
+.ic-row:hover{border-color:var(--primary)}
+.ic-row-icon{width:36px;height:36px;border-radius:9px;background:rgba(124,131,255,.12);color:#7c83ff;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;font-size:18px}
+.ic-row-body{flex:1;min-width:0}
+.ic-row-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px}
+.ic-row-quote{font-size:12px;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:55ch;font-style:italic}
+.ic-row-meta{font-size:11px;color:var(--text-3);margin-top:5px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.ic-cat-badge{display:inline-block;font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;background:rgba(124,131,255,.12);color:#7c83ff}
+.ic-row-actions{display:flex;gap:6px;align-items:center;flex-shrink:0}
+.ic-toggle-btn{position:relative;width:34px;height:19px;border:none;border-radius:10px;background:var(--border);cursor:pointer;transition:background .2s;flex-shrink:0}
+.ic-toggle-btn.on{background:var(--primary)}
+.ic-toggle-btn::after{content:'';position:absolute;left:3px;top:3px;width:13px;height:13px;border-radius:50%;background:#fff;transition:transform .2s}
+.ic-toggle-btn.on::after{transform:translateX(15px)}
+/* Idle badge on display cards */
+.dc-idle-badge{display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:6px;font-size:11px;font-weight:600;border:1px solid rgba(124,131,255,.3);background:rgba(124,131,255,.08);color:#7c83ff;cursor:pointer;transition:all .15s}
+.dc-idle-badge.off{border-color:var(--border);background:var(--surface-2);color:var(--text-3)}
+.dc-idle-badge:hover{border-color:#7c83ff;background:rgba(124,131,255,.15)}
+/* Idle section in ticker modal */
+.idle-mode-group{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.idle-mode-group .ticker-radio-btn.selected{background:rgba(124,131,255,.15);border-color:#7c83ff;color:#7c83ff}
 /* ── News / Ticker ─────────────────────────────────────── */
 .news-list{display:flex;flex-direction:column;gap:8px}
 .news-row{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-radius:10px;background:var(--surface-2);border:1px solid var(--border);transition:border-color .15s}
@@ -739,6 +763,7 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
             <button class="media-chip filter-tab" onclick="filterMedia('slide',this)">Slides</button>
             <button class="media-chip filter-tab" onclick="filterMedia('yt',this)">YouTube</button>
             <button class="media-chip filter-tab" onclick="filterMedia('news',this)">📢 News</button>
+            <button class="media-chip filter-tab" onclick="filterMedia('idle-cards',this)">💬 Idle Cards</button>
           </div>
           <button class="btn btn-primary" onclick="document.getElementById('unifiedFileInput').click()">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
@@ -838,6 +863,31 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
             <div style="text-align:center;padding:28px 18px;color:var(--text-3);font-size:12.5px">
               <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="display:block;margin:0 auto 10px;opacity:.2"><path d="M4 6h16M4 10h16M4 14h8M4 18h6"/></svg>
               No messages yet — click <strong>Add Message</strong> to create one.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Idle Cards -->
+      <div id="idleCardsSection" style="display:none;margin-bottom:14px">
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div>
+              <div style="font-size:14px;font-weight:700">💬 Idle Cards</div>
+              <div style="font-size:12px;color:var(--text-3);margin-top:2px">Rotating quote cards shown when no content is scheduled</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="text" id="icSearchInput" class="form-input" placeholder="Search cards…" style="height:32px;width:160px;font-size:12px" oninput="_icSearch(this.value)">
+              <button class="btn btn-primary btn-sm" onclick="openCardModal()">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add Card
+              </button>
+            </div>
+          </div>
+          <div id="icListContainer" class="ic-list">
+            <div style="text-align:center;padding:28px 18px;color:var(--text-3);font-size:12.5px">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="display:block;margin:0 auto 10px;opacity:.2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              No idle cards yet — click <strong>Add Card</strong> to create one.
             </div>
           </div>
         </div>
@@ -3516,13 +3566,9 @@ function renderClientCard(c, playlists, schedules) {
     </div>
     <div class="dc-actions">
       ${rpiBtns}
-      <button class="dc-ticker-badge${c.ticker_settings && c.ticker_settings.ticker_enabled ? '' : ' off'}" onclick="openTickerModal('${c.id}')" title="Configure news ticker">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h8"/></svg>
-        ${c.ticker_settings && c.ticker_settings.ticker_enabled ? 'Ticker On' : 'Ticker'}
-      </button>
-      <button class="dc-fs-badge${c.ticker_settings && c.ticker_settings.auto_fullscreen ? '' : ' off'}" onclick="openTickerModal('${c.id}')" title="Auto fullscreen settings">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
-        ${c.ticker_settings && c.ticker_settings.auto_fullscreen ? 'FS On' : 'Fullscreen'}
+      <button class="dc-settings-btn" onclick="openTickerModal('${c.id}')" title="Display settings">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+        Settings
       </button>
       <button class="dc-remove-btn" onclick="removeClient('${c.id}')">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
@@ -3646,13 +3692,21 @@ function filterMedia(type, btn) {
   const ytEl = document.getElementById('youtubeList');
   const ytCard = ytEl && ytEl.closest('.card');
   const newsSection = document.getElementById('newsSection');
+  const icSection   = document.getElementById('idleCardsSection');
 
   if (type === 'news') {
     if (mediaGrid) mediaGrid.style.display = 'none';
     if (ytCard)    ytCard.style.display    = 'none';
+    if (icSection) icSection.style.display  = 'none';
     if (newsSection) { newsSection.style.display = ''; loadNewsMessages(); }
+  } else if (type === 'idle-cards') {
+    if (mediaGrid)   mediaGrid.style.display   = 'none';
+    if (ytCard)      ytCard.style.display      = 'none';
+    if (newsSection) newsSection.style.display = 'none';
+    if (icSection)   { icSection.style.display = ''; loadIdleCards(); }
   } else {
     if (newsSection) newsSection.style.display = 'none';
+    if (icSection)   icSection.style.display   = 'none';
     if (mediaGrid) mediaGrid.style.display = (type === 'yt') ? 'none' : '';
     if (ytCard)    ytCard.style.display    = (type === 'all' || type === 'yt') ? '' : 'none';
     document.querySelectorAll('#mediaFileList .file-item').forEach(el => {
@@ -3663,6 +3717,183 @@ function filterMedia(type, btn) {
 
   document.querySelectorAll('.filter-tab').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
+}
+
+/* ── Idle Cards CRUD ─────────────────────────────────────── */
+let _icCache = [];
+
+async function loadIdleCards() {
+  try {
+    const res  = await fetch('/api/idle-cards');
+    const data = await res.json();
+    _icCache = data.cards || [];
+    renderIdleCards(_icCache);
+  } catch(e) {
+    console.error('loadIdleCards failed:', e);
+  }
+}
+
+function _icSearch(q) {
+  const term = (q || '').toLowerCase();
+  const filtered = _icCache.filter(c =>
+    !term ||
+    (c.title   || '').toLowerCase().includes(term) ||
+    (c.quote   || '').toLowerCase().includes(term) ||
+    (c.author  || '').toLowerCase().includes(term) ||
+    (c.category|| '').toLowerCase().includes(term)
+  );
+  renderIdleCards(filtered);
+}
+
+function renderIdleCards(cards) {
+  const container = document.getElementById('icListContainer');
+  if (!container) return;
+  if (!cards.length) {
+    container.innerHTML = `<div style="text-align:center;padding:28px 18px;color:var(--text-3);font-size:12.5px">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="display:block;margin:0 auto 10px;opacity:.2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      No idle cards yet — click <strong>Add Card</strong> to create one.
+    </div>`;
+    return;
+  }
+  container.innerHTML = cards.map(c => `
+    <div class="ic-row" id="ic-row-${c.id}">
+      <div class="ic-row-icon">💬</div>
+      <div class="ic-row-body">
+        <div class="ic-row-quote">"${escHtml(c.quote)}"</div>
+        <div class="ic-row-meta">
+          ${c.author ? `<span>— ${escHtml(c.author)}</span>` : ''}
+          <span style="color:var(--text-3)">${(c.updated_at||'').slice(0,10)||'—'}</span>
+        </div>
+      </div>
+      <div class="ic-row-actions">
+        <button class="ic-toggle-btn${c.enabled!==false?' on':''}" title="${c.enabled!==false?'Disable':'Enable'}" onclick="toggleCard('${c.id}',this)"></button>
+        <button class="icon-btn" title="Edit" onclick="openCardModal('${c.id}')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+        </button>
+        <button class="icon-btn" title="Duplicate" onclick="duplicateCard('${c.id}')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+        <button class="icon-btn danger" title="Delete" onclick="deleteCard('${c.id}')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+        </button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function openCardModal(id) {
+  const modal = document.getElementById('idleCardModal');
+  if (!modal) return;
+  document.getElementById('icEditId').value = id || '';
+  document.getElementById('icModalTitle').textContent = id ? 'Edit Idle Card' : 'Add Idle Card';
+  if (id) {
+    const c = _icCache.find(x => x.id === id);
+    if (c) {
+      document.getElementById('icQuote').value  = c.quote  || '';
+      document.getElementById('icAuthor').value = c.author || '';
+    }
+  } else {
+    document.getElementById('icQuote').value  = '';
+    document.getElementById('icAuthor').value = '';
+  }
+  modal.style.display = 'flex';
+  setTimeout(() => document.getElementById('icQuote').focus(), 60);
+}
+
+function closeCardModal() {
+  const m = document.getElementById('idleCardModal');
+  if (m) m.style.display = 'none';
+}
+
+async function saveCard() {
+  const id    = document.getElementById('icEditId').value.trim();
+  const quote = document.getElementById('icQuote').value.trim();
+  if (!quote) { alert('Quote / Message is required.'); return; }
+  const payload = {
+    quote,
+    author:   document.getElementById('icAuthor').value.trim(),
+    enabled:  true,
+    priority: 0,
+  };
+  try {
+    const res  = await fetch(id ? `/api/idle-cards/${encodeURIComponent(id)}` : '/api/idle-cards', {
+      method:  id ? 'PUT' : 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'save failed');
+    closeCardModal();
+    loadIdleCards();
+  } catch(e) { alert('Failed to save: ' + e.message); }
+}
+
+async function toggleCard(id, btn) {
+  const card = _icCache.find(c => c.id === id);
+  if (!card) return;
+  const newEnabled = card.enabled === false ? true : false;
+  try {
+    const res  = await fetch(`/api/idle-cards/${encodeURIComponent(id)}`, {
+      method: 'PUT', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({enabled: newEnabled}),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error);
+    card.enabled = newEnabled;
+    if (btn) { btn.classList.toggle('on', newEnabled); btn.title = newEnabled ? 'Disable' : 'Enable'; }
+  } catch(e) { alert('Toggle failed: ' + e.message); }
+}
+
+async function duplicateCard(id) {
+  const card = _icCache.find(c => c.id === id);
+  if (!card) return;
+  try {
+    const res  = await fetch('/api/idle-cards', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({...card, title: (card.title ? card.title + ' (copy)' : ''), id: undefined}),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error);
+    loadIdleCards();
+  } catch(e) { alert('Duplicate failed: ' + e.message); }
+}
+
+async function deleteCard(id) {
+  if (!confirm('Delete this idle card?')) return;
+  try {
+    const res  = await fetch(`/api/idle-cards/${encodeURIComponent(id)}`, {method:'DELETE'});
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error);
+    loadIdleCards();
+  } catch(e) { alert('Delete failed: ' + e.message); }
+}
+
+/* ── Idle mode toggle in ticker modal ──────────────────── */
+function _idleToggleCards() {
+  const btn    = document.getElementById('idleCardsToggle');
+  const status = document.getElementById('idleCardsStatus');
+  const on     = btn.classList.toggle('on');
+  status.textContent = on ? 'Enabled' : 'Disabled';
+}
+
+function _idleGetMode() {
+  const btn = document.getElementById('idleCardsToggle');
+  return btn && btn.classList.contains('on') ? 'cards' : 'clock';
+}
+
+function _idleGetVal(groupId) {
+  const group = document.getElementById(groupId);
+  if (!group) return null;
+  const sel = group.querySelector('.ticker-radio-btn.selected');
+  return sel ? sel.dataset.val : null;
+}
+
+function _idleSetVal(groupId, val) {
+  const group = document.getElementById(groupId);
+  if (!group) return;
+  group.querySelectorAll('.ticker-radio-btn').forEach(b => {
+    b.classList.toggle('selected', b.dataset.val === String(val));
+  });
 }
 
 /* Add YouTube link (not in existing JS) */
@@ -4453,10 +4684,19 @@ async function openTickerModal(deviceId) {
   document.getElementById('tickerTextColorText').value= cfg.ticker_text_color || '#ffffff';
   document.getElementById('tickerShowLive').checked   = cfg.ticker_show_live !== false;
 
-  const afsBtn = document.getElementById('autoFsToggle');
-  const afsTxt = document.getElementById('autoFsStatusText');
-  if (afsBtn) afsBtn.classList.toggle('on', !!cfg.auto_fullscreen);
-  if (afsTxt) afsTxt.textContent = cfg.auto_fullscreen ? 'Enabled' : 'Disabled';
+  // Load idle settings for this display
+  let idleCfg = {idle_mode:'clock', card_transition:'slide', card_duration:10};
+  try {
+    const ir = await fetch(`/api/clients/${encodeURIComponent(deviceId)}/idle`);
+    const id = await ir.json();
+    if (id.ok && id.idle) idleCfg = {...idleCfg, ...id.idle};
+  } catch(_) {}
+  const idleToggleBtn = document.getElementById('idleCardsToggle');
+  const idleToggleTxt = document.getElementById('idleCardsStatus');
+  const cardsOn = idleCfg.idle_mode === 'cards';
+  if (idleToggleBtn) idleToggleBtn.classList.toggle('on', cardsOn);
+  if (idleToggleTxt) idleToggleTxt.textContent = cardsOn ? 'Enabled' : 'Disabled';
+
 
   modal.style.display = 'flex';
 }
@@ -4473,12 +4713,6 @@ function _tickerToggleEnabled() {
   status.textContent = on ? 'Enabled' : 'Disabled';
 }
 
-function _autoFsToggle() {
-  const btn    = document.getElementById('autoFsToggle');
-  const status = document.getElementById('autoFsStatusText');
-  const on     = btn.classList.toggle('on');
-  status.textContent = on ? 'Enabled' : 'Disabled';
-}
 
 function _tickerSelectOpt(btn, group) {
   const groupMap = {height: 'tickerHeightGroup', speed: 'tickerSpeedGroup', position: 'tickerPositionGroup'};
@@ -4515,21 +4749,37 @@ async function saveTickerSettings() {
     ticker_bg_color:   document.getElementById('tickerBgColorText').value  || '#1e293b',
     ticker_text_color: document.getElementById('tickerTextColorText').value || '#ffffff',
     ticker_show_live:  document.getElementById('tickerShowLive').checked,
-    auto_fullscreen:   document.getElementById('autoFsToggle').classList.contains('on'),
+    auto_fullscreen:   true,
+  };
+
+  const idlePayload = {
+    idle_mode:       _idleGetMode(),
+    card_transition: 'slide',
+    card_duration:   10,
   };
 
   try {
-    const res = await fetch(`/api/clients/${encodeURIComponent(deviceId)}/ticker`, {
+    // Sequential saves — concurrent writes to clients.json share the same temp file
+    // path in older code and can corrupt the JSON, wiping all registered displays.
+    const tickerRes = await fetch(`/api/clients/${encodeURIComponent(deviceId)}/ticker`, {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(payload),
     });
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error || 'save failed');
+    const tickerData = await tickerRes.json();
+    if (!tickerData.ok) throw new Error(tickerData.error || 'ticker save failed');
+
+    const idleRes = await fetch(`/api/clients/${encodeURIComponent(deviceId)}/idle`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(idlePayload),
+    });
+    const idleData = await idleRes.json();
+    if (!idleData.ok) throw new Error(idleData.error || 'idle save failed');
     closeTickerModal();
     if (typeof loadClients === 'function') loadClients();
   } catch(e) {
-    alert('Failed to save ticker settings: ' + e.message);
+    alert('Failed to save settings: ' + e.message);
   }
 }
 </script>
@@ -4596,11 +4846,6 @@ async function saveTickerSettings() {
         <span style="font-size:13.5px;font-weight:600">Enable News Ticker</span>
         <span id="tickerStatusText" style="font-size:12px;color:var(--text-3)">Disabled</span>
       </div>
-      <div class="ticker-enable-row" style="padding-top:12px;border-top:1px solid var(--border)">
-        <button id="autoFsToggle" class="ticker-en-toggle" onclick="_autoFsToggle()"></button>
-        <span style="font-size:13.5px;font-weight:600">Auto Fullscreen</span>
-        <span id="autoFsStatusText" style="font-size:12px;color:var(--text-3)">Disabled</span>
-      </div>
       <div id="tickerConfigFields">
         <div>
           <div class="ticker-field-label">Ticker Height</div>
@@ -4648,10 +4893,43 @@ async function saveTickerSettings() {
           </label>
         </div>
       </div>
+      <!-- Idle Screen -->
+      <div style="padding-top:14px;border-top:1px solid var(--border)">
+        <div class="ticker-enable-row">
+          <button id="idleCardsToggle" class="ticker-en-toggle" onclick="_idleToggleCards()"></button>
+          <span style="font-size:13.5px;font-weight:600">Idle Cards</span>
+          <span id="idleCardsStatus" style="font-size:12px;color:var(--text-3)">Disabled</span>
+        </div>
+      </div>
     </div>
     <div class="ticker-modal-foot">
       <button class="btn btn-secondary btn-sm" onclick="closeTickerModal()">Cancel</button>
       <button class="btn btn-primary btn-sm" onclick="saveTickerSettings()">Save Settings</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ IDLE CARD MODAL ═══════════ -->
+<div class="sch-modal-overlay" id="idleCardModal" style="display:none" onclick="if(event.target===this)closeCardModal()">
+  <div class="sch-modal" style="max-width:480px">
+    <div class="sch-modal-hdr">
+      <span id="icModalTitle">Add Idle Card</span>
+      <button class="sch-modal-close" onclick="closeCardModal()">×</button>
+    </div>
+    <div class="sch-modal-body">
+      <input type="hidden" id="icEditId">
+      <div>
+        <label class="form-label">Quote / Message <span style="color:var(--danger)">*</span></label>
+        <textarea id="icQuote" class="form-input" rows="4" placeholder="Enter your quote or message…" style="resize:vertical;font-size:13px;line-height:1.5" maxlength="400"></textarea>
+      </div>
+      <div>
+        <label class="form-label">Author <span style="color:var(--text-3);font-weight:400">(optional)</span></label>
+        <input type="text" id="icAuthor" class="form-input" placeholder="e.g. Steve Jobs" maxlength="80">
+      </div>
+    </div>
+    <div class="sch-modal-foot">
+      <button class="btn btn-secondary btn-sm" onclick="closeCardModal()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="saveCard()">Save Card</button>
     </div>
   </div>
 </div>

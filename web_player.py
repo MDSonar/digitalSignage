@@ -18,9 +18,11 @@ import uuid as _uuid_mod
 from utils import read_playlists, get_playlist_by_id, get_active_playlist_id, read_clients, write_clients
 from scheduler_engine import SchedulerEngine
 from ticker_engine import TickerEngine
+from environment_service import EnvironmentService
 
 _scheduler = SchedulerEngine()
 _ticker = TickerEngine()
+_env = EnvironmentService()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -533,7 +535,7 @@ _TICKER_DEFAULTS = {
     'ticker_bg_color':   '#1e293b',
     'ticker_text_color': '#ffffff',
     'ticker_show_live':  True,
-    'auto_fullscreen':   False,
+    'auto_fullscreen':   True,
 }
 
 
@@ -546,6 +548,61 @@ def api_ticker_get(cid):
         return jsonify({'ok': False, 'error': 'not found'}), 404
     ticker = {**_TICKER_DEFAULTS, **(client.get('ticker_settings') or {})}
     return jsonify({'ok': True, 'ticker': ticker})
+
+
+# ── Idle Cards ────────────────────────────────────────────────
+
+_IDLE_DEFAULTS = {
+    'idle_mode':       'clock',
+    'card_transition': 'fade',
+    'card_duration':   10,
+}
+
+_IDLE_CARDS_FILE = Path.home() / 'signage' / 'idle_cards.json'
+
+
+def _read_idle_cards() -> dict:
+    if _IDLE_CARDS_FILE.exists():
+        try:
+            import json as _json
+            return _json.loads(_IDLE_CARDS_FILE.read_text(encoding='utf-8'))
+        except Exception:
+            pass
+    return {'cards': []}
+
+
+@app.route('/api/idle-cards')
+def api_idle_cards():
+    """Public endpoint — returns enabled idle cards ordered by priority."""
+    try:
+        store = _read_idle_cards()
+        cards = [c for c in store.get('cards', []) if c.get('enabled', True)]
+        cards.sort(key=lambda c: (-int(c.get('priority', 0)), c.get('created_at', '')))
+        return jsonify({'ok': True, 'cards': cards})
+    except Exception:
+        logger.exception('Idle cards fetch failed')
+        return jsonify({'ok': True, 'cards': []})
+
+
+@app.route('/api/environment')
+def api_environment():
+    """Returns cached location + weather + AQI for the environment widget."""
+    try:
+        return jsonify(_env.get())
+    except Exception:
+        logger.exception('Environment service error')
+        return jsonify({'ok': False, 'reason': 'error'}), 500
+
+
+@app.route('/api/clients/<cid>/idle')
+def api_idle_settings_get(cid):
+    """Public endpoint — returns per-display idle screen settings."""
+    store = read_clients()
+    client = next((c for c in store.get('clients', []) if c['id'] == cid), None)
+    if not client:
+        return jsonify({'ok': False, 'error': 'not found'}), 404
+    settings = {**_IDLE_DEFAULTS, **(client.get('idle_settings') or {})}
+    return jsonify({'ok': True, 'idle': settings})
 
 
 if __name__ == '__main__':
